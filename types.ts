@@ -8,6 +8,8 @@ export interface Court {
   name: string;
   type: SportType;
   pricePerHour: number;
+  address?: string;
+  photos?: string[];
 }
 
 export interface Venue {
@@ -18,6 +20,8 @@ export interface Venue {
   imageUrl: string;
   courts: Court[];
   openingHours: string; // e.g., "08:00 - 22:00"
+  amenities: string[]; // e.g., ["Wifi", "Estacionamiento"]
+  contactInfo: string; // e.g., "+595 991 123 456"
 }
 
 export interface Booking {

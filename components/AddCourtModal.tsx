@@ -1,0 +1,337 @@
+
+import React, { useState } from 'react';
+import { SportType, Court } from '../types';
+
+interface AddCourtModalProps {
+    currentVenueName: string;
+    currentVenueAddress: string;
+    currentOpeningHours: string;
+    currentImageUrl: string;
+    currentAmenities?: string[];
+    currentContactInfo?: string;
+    onClose: () => void;
+    onSave: (
+        venueName: string, 
+        venueAddress: string, 
+        openingHours: string, 
+        imageUrl: string, 
+        amenities: string[], 
+        contactInfo: string, 
+        newCourts: Omit<Court, 'id'>[]
+    ) => void;
+}
+
+export const AddCourtModal: React.FC<AddCourtModalProps> = ({ 
+    currentVenueName, 
+    currentVenueAddress, 
+    currentOpeningHours,
+    currentImageUrl,
+    currentAmenities = [],
+    currentContactInfo = '',
+    onClose, 
+    onSave 
+}) => {
+    // Venue State
+    const [venueName, setVenueName] = useState(currentVenueName);
+    const [venueAddress, setVenueAddress] = useState(currentVenueAddress);
+    
+    // Parse initial hours (e.g. "08:00 - 22:00")
+    const [startHour, setStartHour] = useState(currentOpeningHours.split(' - ')[0] || '08:00');
+    const [endHour, setEndHour] = useState(currentOpeningHours.split(' - ')[1] || '22:00');
+    
+    const [imageUrl, setImageUrl] = useState(currentImageUrl);
+    
+    // Step 4: Amenities
+    const [amenities, setAmenities] = useState<string[]>(currentAmenities);
+    
+    // Step 5: Contact
+    const [contactPhone, setContactPhone] = useState(currentContactInfo);
+
+    // Pending Courts List
+    const [pendingCourts, setPendingCourts] = useState<Omit<Court, 'id'>[]>([]);
+
+    // Current Court Form State
+    const [courtName, setCourtName] = useState('');
+    const [courtType, setCourtType] = useState<SportType>('Padel');
+    const [price, setPrice] = useState(0);
+    const [error, setError] = useState('');
+
+    const formatNumber = (num: number) => {
+        return new Intl.NumberFormat('es-PY').format(num);
+    };
+
+    const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const rawValue = e.target.value.replace(/\D/g, '');
+        setPrice(Number(rawValue));
+    };
+
+    const handleAddCourtToList = () => {
+        if (!courtName.trim()) {
+            setError('Ingresa un nombre para la cancha');
+            return;
+        }
+        if (price <= 0) {
+            setError('El precio debe ser mayor a 0');
+            return;
+        }
+
+        const newCourt: Omit<Court, 'id'> = {
+            name: courtName.trim(),
+            type: courtType,
+            pricePerHour: price,
+            address: venueAddress // Inherit venue address by default
+        };
+
+        setPendingCourts([...pendingCourts, newCourt]);
+        
+        // Reset form
+        setCourtName('');
+        setPrice(0);
+        setError('');
+    };
+
+    const removePendingCourt = (index: number) => {
+        setPendingCourts(pendingCourts.filter((_, i) => i !== index));
+    };
+
+    const handleSave = (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        if (!venueName.trim()) {
+            setError('El nombre del complejo es obligatorio');
+            return;
+        }
+
+        if (pendingCourts.length === 0 && !window.confirm('¿Guardar sin agregar nuevas canchas?')) {
+            return;
+        }
+
+        const fullOpeningHours = `${startHour} - ${endHour}`;
+        onSave(venueName, venueAddress, fullOpeningHours, imageUrl, amenities, contactPhone, pendingCourts);
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 animate-in fade-in zoom-in duration-300 max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-2xl font-extrabold text-gray-900">Administrar Complejo</h3>
+                    <button
+                        onClick={onClose}
+                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div className="space-y-6">
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    {/* Section 1: Venue Details */}
+                    <div className="bg-gray-50 p-4 rounded-2xl space-y-4">
+                        <h4 className="font-bold text-gray-800">1. Detalles del Complejo</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Nombre del Complejo</label>
+                                <input
+                                    type="text"
+                                    value={venueName}
+                                    onChange={(e) => setVenueName(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Dirección</label>
+                                <input
+                                    type="text"
+                                    value={venueAddress}
+                                    onChange={(e) => setVenueAddress(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 2: Opening Hours */}
+                    <div className="bg-gray-50 p-4 rounded-2xl space-y-4">
+                        <h4 className="font-bold text-gray-800">2. Horarios de Atención</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Apertura</label>
+                                <input
+                                    type="time"
+                                    value={startHour}
+                                    onChange={(e) => setStartHour(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">Cierre</label>
+                                <input
+                                    type="time"
+                                    value={endHour}
+                                    onChange={(e) => setEndHour(e.target.value)}
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 3: Venue Photo */}
+                    <div className="bg-gray-50 p-4 rounded-2xl space-y-4">
+                        <h4 className="font-bold text-gray-800">3. Foto del Complejo</h4>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">URL de la Imagen</label>
+                            <input
+                                type="text"
+                                value={imageUrl}
+                                onChange={(e) => setImageUrl(e.target.value)}
+                                placeholder="https://..."
+                                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                            {imageUrl && (
+                                <div className="mt-2 h-32 rounded-xl overflow-hidden bg-gray-100">
+                                    <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Section 4: Amenities */}
+                    <div className="bg-gray-50 p-4 rounded-2xl space-y-4">
+                        <h4 className="font-bold text-gray-800">4. Servicios (Amenities)</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            {['Wifi', 'Estacionamiento', 'Vestuarios', 'Bar/Cantina', 'Iluminación LED', 'Alquiler de Paletas'].map(item => (
+                                <label key={item} className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={amenities.includes(item)}
+                                        onChange={() => {
+                                            if (amenities.includes(item)) {
+                                                setAmenities(amenities.filter(a => a !== item));
+                                            } else {
+                                                setAmenities([...amenities, item]);
+                                            }
+                                        }}
+                                        className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-gray-700 text-sm font-medium">{item}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Section 5: Contact */}
+                    <div className="bg-gray-50 p-4 rounded-2xl space-y-4">
+                        <h4 className="font-bold text-gray-800">5. Contacto</h4>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Teléfono / WhatsApp</label>
+                            <input
+                                type="text"
+                                value={contactPhone}
+                                onChange={(e) => setContactPhone(e.target.value)}
+                                placeholder="+595 9..."
+                                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Section 6: Add Courts */}
+                    <div className="bg-indigo-50 p-4 rounded-2xl space-y-4">
+                        <h4 className="font-bold text-indigo-900">6. Agregar Canchas</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            <div className="md:col-span-4">
+                                <label className="block text-xs font-bold text-indigo-800 mb-1">Nombre Cancha</label>
+                                <input
+                                    type="text"
+                                    value={courtName}
+                                    onChange={(e) => setCourtName(e.target.value)}
+                                    placeholder="Ej: Cancha 1"
+                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-bold text-indigo-800 mb-1">Deporte</label>
+                                <select 
+                                    value={courtType}
+                                    onChange={(e) => setCourtType(e.target.value as SportType)}
+                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                >
+                                    <option value="Padel">Padel</option>
+                                    <option value="Beach Tennis">Beach Tennis</option>
+                                </select>
+                            </div>
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-bold text-indigo-800 mb-1">Precio (Gs)</label>
+                                <input
+                                    type="text"
+                                    value={price === 0 ? '' : formatNumber(price)}
+                                    onChange={handlePriceChange}
+                                    placeholder="0"
+                                    className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <button
+                                    type="button"
+                                    onClick={handleAddCourtToList}
+                                    className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition shadow-md"
+                                >
+                                    + Agregar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section 7: Pending List */}
+                    {pendingCourts.length > 0 && (
+                        <div>
+                            <h4 className="font-bold text-gray-800 mb-3">7. Canchas a Guardar ({pendingCourts.length})</h4>
+                            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                                {pendingCourts.map((court, idx) => (
+                                    <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 p-3 rounded-xl shadow-sm">
+                                        <div className="flex items-center gap-3">
+                                            <span className={`w-2 h-8 rounded-full ${court.type === 'Padel' ? 'bg-indigo-500' : 'bg-orange-400'}`}></span>
+                                            <div>
+                                                <p className="font-bold text-gray-900">{court.name}</p>
+                                                <p className="text-xs text-gray-500">{court.type} • Gs. {formatNumber(court.pricePerHour)}</p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => removePendingCourt(idx)}
+                                            className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-3 pt-4 border-t border-gray-100">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="flex-1 py-3 border-2 border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition shadow-lg shadow-indigo-200"
+                        >
+                            Guardar Todo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};

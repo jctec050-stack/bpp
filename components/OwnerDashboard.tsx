@@ -53,7 +53,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, venue 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <p className="text-gray-500 text-sm font-medium">Ingresos Totales</p>
-          <h4 className="text-3xl font-bold text-gray-900 mt-1">${totalRevenue}</h4>
+          <h4 className="text-3xl font-bold text-gray-900 mt-1">Gs. {totalRevenue.toLocaleString('es-PY')}</h4>
           <span className="text-green-500 text-xs font-semibold">↑ 12% vs mes anterior</span>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
