@@ -1,5 +1,7 @@
 
 import React, { useState } from 'react';
+import { PasswordResetModal } from './PasswordResetModal';
+import { useAuth } from '@/AuthContext';
 
 interface LoginFormProps {
     onLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -7,10 +9,12 @@ interface LoginFormProps {
 }
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegister }) => {
+    const { resetPassword } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showResetModal, setShowResetModal] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -27,6 +31,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegiste
 
         if (!result.success) {
             setError(result.error || 'Error al iniciar sesión');
+        }
+    };
+
+    const handlePasswordReset = async (email: string) => {
+        const result = await resetPassword(email);
+        if (!result.success) {
+            setError(result.error || 'Error al enviar email de recuperación');
         }
     };
 
@@ -56,7 +67,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegiste
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                            className="w-full px-4 py-3.5 md:py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-base"
                             placeholder="tu@email.com"
                             autoComplete="email"
                         />
@@ -71,7 +82,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegiste
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                            className="w-full px-4 py-3.5 md:py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-base"
                             placeholder="Tu contraseña"
                             autoComplete="current-password"
                         />
@@ -80,10 +91,21 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegiste
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-4 md:py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                     >
                         {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
                     </button>
+
+                    {/* Forgot Password Link */}
+                    <div className="text-center">
+                        <button
+                            type="button"
+                            onClick={() => setShowResetModal(true)}
+                            className="text-sm text-indigo-600 hover:text-indigo-700 font-medium transition"
+                        >
+                            ¿Olvidaste tu contraseña?
+                        </button>
+                    </div>
                 </form>
 
                 <div className="mt-6 text-center">
@@ -98,6 +120,14 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegiste
                     </p>
                 </div>
             </div>
+
+            {/* Password Reset Modal */}
+            {showResetModal && (
+                <PasswordResetModal
+                    onClose={() => setShowResetModal(false)}
+                    onSubmit={handlePasswordReset}
+                />
+            )}
         </div>
     );
 };

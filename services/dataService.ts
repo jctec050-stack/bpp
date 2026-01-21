@@ -25,6 +25,8 @@ export const getVenues = async (): Promise<Venue[]> => {
         openingHours: v.opening_hours,
         amenities: v.amenities,
         contactInfo: v.contact_info,
+        latitude: v.latitude,
+        longitude: v.longitude,
         courts: v.courts.map((c: any) => ({
             id: c.id,
             name: c.name,
@@ -182,6 +184,26 @@ export const createVenueWithCourts = async (
         }
     }
 
+    // Geocode address to get coordinates
+    let latitude: number | null = null;
+    let longitude: number | null = null;
+
+    try {
+        console.log('🌍 Geocoding address:', venue.address);
+        const { geocodeAddress } = await import('@/lib/geocoding');
+        const coords = await geocodeAddress(venue.address);
+
+        if (coords) {
+            latitude = coords.lat;
+            longitude = coords.lng;
+            console.log('✅ Coordinates obtained:', coords);
+        } else {
+            console.warn('⚠️ Could not geocode address, saving without coordinates');
+        }
+    } catch (error) {
+        console.error('❌ Geocoding error:', error);
+    }
+
     try {
         console.log('📝 Attempting to insert venue into DB (Image URL length: ' + imageUrl.length + ')');
 
@@ -195,7 +217,9 @@ export const createVenueWithCourts = async (
                 image_url: imageUrl,
                 opening_hours: venue.openingHours,
                 amenities: venue.amenities,
-                contact_info: venue.contactInfo
+                contact_info: venue.contactInfo,
+                latitude: latitude,
+                longitude: longitude
             })
             .select()
             .single();

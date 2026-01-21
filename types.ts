@@ -22,6 +22,8 @@ export interface Venue {
   openingHours: string; // e.g., "08:00 - 22:00"
   amenities: string[]; // e.g., ["Wifi", "Estacionamiento"]
   contactInfo: string; // e.g., "+595 991 123 456"
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Booking {

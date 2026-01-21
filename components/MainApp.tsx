@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Venue, Booking, Notification, Court, DisabledSlot } from '@/types';
 import { TIME_SLOTS } from '@/constants';
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -40,6 +40,8 @@ const MainApp: React.FC = () => {
     };
 
     const [venueToEdit, setVenueToEdit] = useState<Venue | null>(null);
+    const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
+    const [locationPermission, setLocationPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
 
     // Fetch Data (Venues & Bookings)
     const fetchData = useCallback(async () => {
@@ -63,6 +65,55 @@ const MainApp: React.FC = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    // Request user location for proximity sorting
+    useEffect(() => {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setUserLocation({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    });
+                    setLocationPermission('granted');
+                    console.log('✅ User location obtained:', position.coords);
+                },
+                (error) => {
+                    console.warn('⚠️ Geolocation denied or unavailable:', error.message);
+                    setLocationPermission('denied');
+                },
+                {
+                    enableHighAccuracy: false, // Faster, less battery
+                    timeout: 10000,
+                    maximumAge: 300000 // Cache for 5 minutes
+                }
+            );
+        } else {
+            console.warn('⚠️ Geolocation not supported');
+            setLocationPermission('denied');
+        }
+    }, []);
+
+    // Sort venues by proximity to user location
+    const sortedVenues = useMemo(() => {
+        if (!userLocation || venues.length === 0) return venues;
+
+        const { calculateDistance } = require('@/lib/geocoding');
+
+        // Separate venues with and without coordinates
+        const venuesWithCoords = venues.filter(v => v.latitude && v.longitude);
+        const venuesWithoutCoords = venues.filter(v => !v.latitude || !v.longitude);
+
+        // Sort venues with coordinates by distance
+        const sorted = venuesWithCoords.sort((a, b) => {
+            const distA = calculateDistance(userLocation.lat, userLocation.lng, a.latitude!, a.longitude!);
+            const distB = calculateDistance(userLocation.lat, userLocation.lng, b.latitude!, b.longitude!);
+            return distA - distB;
+        });
+
+        // Return sorted venues with coords first, then venues without coords
+        return [...sorted, ...venuesWithoutCoords];
+    }, [venues, userLocation]);
 
 
     // Logic to add notifications
@@ -382,20 +433,20 @@ const MainApp: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 pb-12">
-            {/* Header */}
-            <nav className="sticky top-0 z-40 bg-white border-b border-gray-200 px-4 md:px-8 py-4 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => setSelectedVenue(null)}>
-                    <img src="/logo.png" alt="TuCancha" className="w-12 h-12 object-contain" />
-                    <span className="font-bold text-2xl text-gray-900 tracking-tight">TuCancha!</span>
+            {/* Header - Mobile Optimized */}
+            <nav className="sticky top-0 z-40 bg-white border-b border-gray-200 px-3 md:px-8 py-2 md:py-4 flex items-center justify-between shadow-sm">
+                <div className="flex items-center gap-2 md:gap-3 cursor-pointer" onClick={() => setSelectedVenue(null)}>
+                    <img src="/logo.png" alt="TuCancha" className="w-10 h-10 md:w-12 md:h-12 object-contain" />
+                    <span className="font-bold text-lg md:text-2xl text-gray-900 tracking-tight">TuCancha!</span>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 md:gap-4">
                     <div className="relative">
                         <button
                             onClick={() => setShowNotifications(!showNotifications)}
-                            className="p-2 text-gray-500 hover:bg-gray-100 rounded-full transition relative"
+                            className="p-2 md:p-2.5 text-gray-500 hover:bg-gray-100 rounded-full transition relative touch-manipulation"
                         >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                            <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
                             {userNotifications.length > 0 && (
                                 <span className="absolute top-1 right-1 block h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white"></span>
                             )}
@@ -414,7 +465,7 @@ const MainApp: React.FC = () => {
                     </div>
                     <button
                         onClick={logout}
-                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                        className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition touch-manipulation"
                         title="Cerrar sesión"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -464,50 +515,62 @@ const MainApp: React.FC = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {venues.map(v => (
-                                <div key={v.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition group cursor-pointer" onClick={() => setSelectedVenue(v)}>
-                                    <div className="relative h-48">
-                                        {v.imageUrl ? (
-                                            <img src={v.imageUrl} alt={v.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                                        ) : (
-                                            <div className="w-full h-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
-                                                <svg className="w-16 h-16 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
+                            {sortedVenues.map((v, index) => {
+                                return (
+                                    <div key={v.id} className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-xl transition group cursor-pointer" onClick={() => setSelectedVenue(v)}>
+                                        <div className="relative h-48">
+                                            {v.imageUrl ? (
+                                                <img src={v.imageUrl} alt={v.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
+                                            ) : (
+                                                <div className="w-full h-full bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+                                                    <svg className="w-16 h-16 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                </div>
+                                            )}
+                                            {/* Distance Badge */}
+                                            {userLocation && v.latitude && v.longitude && (() => {
+                                                const { calculateDistance } = require('@/lib/geocoding');
+                                                const distance = calculateDistance(userLocation.lat, userLocation.lng, v.latitude, v.longitude);
+                                                return (
+                                                    <div className="absolute top-4 left-4 bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                                                        📍 {distance.toFixed(1)} km
+                                                    </div>
+                                                );
+                                            })()}
+                                            <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                                                Abierto: {v.openingHours}
                                             </div>
-                                        )}
-                                        <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-indigo-600 uppercase tracking-wider">
-                                            Abierto: {v.openingHours}
+                                        </div>
+                                        <div className="p-6">
+                                            <h3 className="text-xl font-bold text-gray-900">{v.name}</h3>
+                                            <a
+                                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.address)}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="text-gray-500 hover:text-indigo-600 text-sm mt-1 mb-4 flex items-center gap-1 transition group w-fit"
+                                            >
+                                                <svg className="w-4 h-4 text-indigo-400 group-hover:text-indigo-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
+                                                <span className="group-hover:underline">{v.address}</span>
+                                                <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                </svg>
+                                            </a>
+                                            <div className="flex items-center gap-2 mb-6">
+                                                {Array.from(new Set(v.courts.map(c => c.type))).map(type => (
+                                                    <span key={type} className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-bold rounded uppercase tracking-tighter">
+                                                        {type}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <button className="w-full py-3 bg-indigo-50 text-indigo-600 font-bold rounded-xl hover:bg-indigo-600 hover:text-white transition">
+                                                Ver Disponibilidad
+                                            </button>
                                         </div>
                                     </div>
-                                    <div className="p-6">
-                                        <h3 className="text-xl font-bold text-gray-900">{v.name}</h3>
-                                        <a
-                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v.address)}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="text-gray-500 hover:text-indigo-600 text-sm mt-1 mb-4 flex items-center gap-1 transition group w-fit"
-                                        >
-                                            <svg className="w-4 h-4 text-indigo-400 group-hover:text-indigo-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
-                                            <span className="group-hover:underline">{v.address}</span>
-                                            <svg className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                            </svg>
-                                        </a>
-                                        <div className="flex items-center gap-2 mb-6">
-                                            {Array.from(new Set(v.courts.map(c => c.type))).map(type => (
-                                                <span key={type} className="px-2 py-1 bg-gray-100 text-gray-600 text-[10px] font-bold rounded uppercase tracking-tighter">
-                                                    {type}
-                                                </span>
-                                            ))}
-                                        </div>
-                                        <button className="w-full py-3 bg-indigo-50 text-indigo-600 font-bold rounded-xl hover:bg-indigo-600 hover:text-white transition">
-                                            Ver Disponibilidad
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         {/* Current Bookings for Player */}
@@ -717,13 +780,13 @@ const MainApp: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Floating Action Bar for Selections */}
+                        {/* Floating Action Bar for Selections - Mobile Optimized */}
                         {selectedSlots.length > 0 && (
-                            <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in">
-                                <div className="bg-gray-900 text-white rounded-2xl shadow-2xl px-8 py-4 flex items-center gap-8 min-w-[320px]">
-                                    <div>
+                            <div className="fixed bottom-4 md:bottom-6 left-4 right-4 md:left-1/2 md:right-auto md:transform md:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in">
+                                <div className="bg-gray-900 text-white rounded-2xl shadow-2xl px-4 md:px-8 py-3 md:py-4 flex flex-col sm:flex-row items-center gap-3 md:gap-8 md:min-w-[320px]">
+                                    <div className="text-center sm:text-left">
                                         <p className="text-gray-400 text-xs font-bold uppercase mb-0.5">Total a Pagar</p>
-                                        <p className="text-xl font-extrabold text-white">
+                                        <p className="text-lg md:text-xl font-extrabold text-white">
                                             Gs. {selectedSlots.reduce((acc, curr) => acc + curr.price, 0).toLocaleString('es-PY')}
                                         </p>
                                         <p className="text-xs text-gray-400">
@@ -732,7 +795,7 @@ const MainApp: React.FC = () => {
                                     </div>
                                     <button
                                         onClick={handleConfirmBooking}
-                                        className="bg-indigo-500 hover:bg-indigo-400 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/30 transition transform hover:scale-105 active:scale-95"
+                                        className="w-full sm:w-auto bg-indigo-500 hover:bg-indigo-400 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/30 transition transform hover:scale-105 active:scale-95 touch-manipulation"
                                     >
                                         Confirmar Reserva
                                     </button>
@@ -760,11 +823,11 @@ const MainApp: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Tab Navigation */}
-                        <div className="flex gap-2 border-b border-gray-200">
+                        {/* Tab Navigation - Mobile Optimized */}
+                        <div className="flex gap-1 md:gap-2 border-b border-gray-200 overflow-x-auto">
                             <button
                                 onClick={() => setOwnerTab('dashboard')}
-                                className={`px-6 py-3 font-bold text-sm transition-all ${ownerTab === 'dashboard'
+                                className={`px-4 md:px-6 py-3 font-bold text-xs md:text-sm transition-all whitespace-nowrap touch-manipulation ${ownerTab === 'dashboard'
                                     ? 'text-indigo-600 border-b-2 border-indigo-600'
                                     : 'text-gray-500 hover:text-gray-700'
                                     }`}
@@ -773,21 +836,21 @@ const MainApp: React.FC = () => {
                             </button>
                             <button
                                 onClick={() => setOwnerTab('schedule')}
-                                className={`px-6 py-3 font-bold text-sm transition-all ${ownerTab === 'schedule'
+                                className={`px-4 md:px-6 py-3 font-bold text-xs md:text-sm transition-all whitespace-nowrap touch-manipulation ${ownerTab === 'schedule'
                                     ? 'text-indigo-600 border-b-2 border-indigo-600'
                                     : 'text-gray-500 hover:text-gray-700'
                                     }`}
                             >
-                                📅 Gestión de Horarios
+                                📅 <span className="hidden sm:inline">Gestión de </span>Horarios
                             </button>
                             <button
                                 onClick={() => setOwnerTab('venues')}
-                                className={`px-6 py-3 font-bold text-sm transition-all ${ownerTab === 'venues'
+                                className={`px-4 md:px-6 py-3 font-bold text-xs md:text-sm transition-all whitespace-nowrap touch-manipulation ${ownerTab === 'venues'
                                     ? 'text-indigo-600 border-b-2 border-indigo-600'
                                     : 'text-gray-500 hover:text-gray-700'
                                     }`}
                             >
-                                🏭 Mis Complejos
+                                🏭 <span className="hidden sm:inline">Mis </span>Complejos
                             </button>
                         </div>
 
@@ -840,19 +903,20 @@ const MainApp: React.FC = () => {
                         )}
 
                         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-                            <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-                                <h4 className="text-lg font-bold text-gray-900">Todas las Reservas ({selectedDate})</h4>
+                            <div className="p-4 md:p-6 border-b border-gray-50 flex items-center justify-between">
+                                <h4 className="text-base md:text-lg font-bold text-gray-900">Todas las Reservas ({selectedDate})</h4>
                             </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
+                            {/* Mobile-responsive table with horizontal scroll */}
+                            <div className="overflow-x-auto -mx-px">
+                                <table className="w-full text-left min-w-[640px]">
                                     <thead className="bg-gray-50/50 text-gray-400 text-[10px] font-bold uppercase tracking-widest">
                                         <tr>
-                                            <th className="px-6 py-4">Jugador</th>
-                                            <th className="px-6 py-4">Cancha</th>
-                                            <th className="px-6 py-4">Fecha & Hora</th>
-                                            <th className="px-6 py-4">Monto</th>
-                                            <th className="px-6 py-4">Estado</th>
-                                            <th className="px-6 py-4">Acciones</th>
+                                            <th className="px-4 md:px-6 py-4">Jugador</th>
+                                            <th className="px-4 md:px-6 py-4">Cancha</th>
+                                            <th className="px-4 md:px-6 py-4">Fecha & Hora</th>
+                                            <th className="px-4 md:px-6 py-4">Monto</th>
+                                            <th className="px-4 md:px-6 py-4">Estado</th>
+                                            <th className="px-4 md:px-6 py-4">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
@@ -863,36 +927,36 @@ const MainApp: React.FC = () => {
                                         ) : (
                                             getCombinedHistory(selectedDate).map(group => (
                                                 <tr key={group.id[0]} className="hover:bg-gray-50/50 transition">
-                                                    <td className="px-6 py-4 font-bold text-gray-700">
+                                                    <td className="px-4 md:px-6 py-4 font-bold text-gray-700 text-sm">
                                                         {group.status === 'DISABLED' ? (
                                                             <span className="text-gray-500 italic">{group.playerName}</span>
                                                         ) : (
                                                             group.playerName
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 md:px-6 py-4">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-sm text-gray-600 font-medium">{group.courtName}</span>
                                                             {group.courtType && (
                                                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${group.courtType === 'Padel'
-                                                                        ? 'bg-indigo-100 text-indigo-700'
-                                                                        : 'bg-orange-100 text-orange-700'
+                                                                    ? 'bg-indigo-100 text-indigo-700'
+                                                                    : 'bg-orange-100 text-orange-700'
                                                                     }`}>
                                                                     {group.courtType}
                                                                 </span>
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 md:px-6 py-4">
                                                         <div className="text-sm">
                                                             <p className="font-bold text-gray-900">{group.date}</p>
                                                             <p className="text-gray-500">{group.timeRange} {group.count > 1 ? `(${group.count} turnos)` : ''}</p>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 font-bold text-indigo-600">
+                                                    <td className="px-4 md:px-6 py-4 font-bold text-indigo-600 text-sm">
                                                         {group.status === 'DISABLED' ? '-' : `$${group.price}`}
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 md:px-6 py-4">
                                                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${group.status === 'ACTIVE'
                                                             ? 'bg-green-100 text-green-700'
                                                             : group.status === 'COMPLETED'
@@ -904,7 +968,7 @@ const MainApp: React.FC = () => {
                                                             {group.status === 'ACTIVE' ? 'Activa' : group.status === 'COMPLETED' ? 'Completada' : group.status === 'DISABLED' ? 'Bloqueado' : 'Cancelada'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 md:px-6 py-4">
                                                         <button
                                                             onClick={() => group.status === 'DISABLED' ? handleToggleSlot(group.courtId, group.date, group.startTime) : handleCancelClick(group.id)}
                                                             className="text-gray-400 hover:text-red-600 transition"

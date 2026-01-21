@@ -86,7 +86,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                            className="w-full px-4 py-3.5 md:py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-base"
                             placeholder="Juan Pérez"
                         />
                     </div>
@@ -100,7 +100,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                            className="w-full px-4 py-3.5 md:py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-base"
                             placeholder="tu@email.com"
                         />
                     </div>
@@ -114,7 +114,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                            className="w-full px-4 py-3.5 md:py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-base"
                             placeholder="Mínimo 6 caracteres"
                         />
                     </div>
@@ -128,7 +128,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                            className="w-full px-4 py-3.5 md:py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-base"
                             placeholder="Repite tu contraseña"
                         />
                     </div>
@@ -141,7 +141,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                             <button
                                 type="button"
                                 onClick={() => setRole('PLAYER')}
-                                className={`py-3 px-4 rounded-xl font-bold text-sm transition ${role === 'PLAYER'
+                                className={`py-3.5 md:py-3 px-4 rounded-xl font-bold text-sm transition touch-manipulation ${role === 'PLAYER'
                                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     }`}
@@ -151,7 +151,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                             <button
                                 type="button"
                                 onClick={() => setRole('OWNER')}
-                                className={`py-3 px-4 rounded-xl font-bold text-sm transition ${role === 'OWNER'
+                                className={`py-3.5 md:py-3 px-4 rounded-xl font-bold text-sm transition touch-manipulation ${role === 'OWNER'
                                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200'
                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                                     }`}
@@ -164,7 +164,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                     >
                         {loading ? 'Registrando...' : 'Crear Cuenta'}
                     </button>
