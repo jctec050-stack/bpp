@@ -3,26 +3,34 @@
 import React, { useState, useEffect } from 'react';
 import { Venue, DisabledSlot } from '@/types';
 import { TIME_SLOTS } from '@/constants';
+import { DisableSlotModal } from './DisableSlotModal';
 
 interface ScheduleManagerProps {
     venue: Venue;
     bookings: any[];
     disabledSlots: DisabledSlot[];
-    onToggleSlot: (courtId: string, date: string, timeSlot: string) => Promise<void>;
+    onToggleSlot: (courtId: string, date: string, timeSlot: string, reason?: string) => Promise<void>;
+    selectedDate: string;
+    onDateChange: (date: string) => void;
 }
 
 export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
     venue,
     bookings,
     disabledSlots,
-    onToggleSlot
+    onToggleSlot,
+    selectedDate,
+    onDateChange
 }) => {
-    const [selectedDate, setSelectedDate] = useState<string>('');
     const [loading, setLoading] = useState<string>(''); // courtId-timeSlot being toggled
 
-    useEffect(() => {
-        setSelectedDate(new Date().toISOString().split('T')[0]);
-    }, []);
+    // Modal State
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [slotToDisable, setSlotToDisable] = useState<{
+        courtId: string;
+        timeSlot: string;
+        courtName: string;
+    } | null>(null);
 
     const isSlotBooked = (courtId: string, timeSlot: string) => {
         return bookings.some(b =>
@@ -41,20 +49,41 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
         );
     };
 
-    const handleToggle = async (courtId: string, timeSlot: string) => {
+    const getSlotStatus = (courtId: string, timeSlot: string) => {
+        if (isSlotBooked(courtId, timeSlot)) return 'booked';
+        if (isSlotDisabled(courtId, timeSlot)) return 'disabled';
+        return 'available';
+    };
+
+    const handleSlotClick = async (courtId: string, timeSlot: string, courtName: string) => {
+        const currentStatus = getSlotStatus(courtId, timeSlot);
+
+        if (currentStatus === 'available') {
+            // Open modal to ask for reason
+            setSlotToDisable({ courtId, timeSlot, courtName });
+            setIsModalOpen(true);
+        } else if (currentStatus === 'disabled') {
+            // Directly enable (remove disabled status)
+            await processToggle(courtId, timeSlot);
+        }
+    };
+
+    const processToggle = async (courtId: string, timeSlot: string, reason?: string) => {
         const loadingKey = `${courtId}-${timeSlot}`;
         setLoading(loadingKey);
         try {
-            await onToggleSlot(courtId, selectedDate, timeSlot);
+            await onToggleSlot(courtId, selectedDate, timeSlot, reason);
         } finally {
             setLoading('');
         }
     };
 
-    const getSlotStatus = (courtId: string, timeSlot: string) => {
-        if (isSlotBooked(courtId, timeSlot)) return 'booked';
-        if (isSlotDisabled(courtId, timeSlot)) return 'disabled';
-        return 'available';
+    const handleConfirmDisable = async (reason: string) => {
+        if (slotToDisable) {
+            await processToggle(slotToDisable.courtId, slotToDisable.timeSlot, reason);
+            setIsModalOpen(false);
+            setSlotToDisable(null);
+        }
     };
 
     return (
@@ -69,7 +98,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                         <input
                             type="date"
                             value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
+                            onChange={(e) => onDateChange(e.target.value)}
                             className="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                         />
                     </div>
@@ -114,7 +143,7 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                                     <button
                                         key={slot}
                                         disabled={status === 'booked' || isLoading}
-                                        onClick={() => handleToggle(court.id, slot)}
+                                        onClick={() => handleSlotClick(court.id, slot, court.name)}
                                         className={`
                                             py-3 rounded-xl font-bold text-sm transition-all relative
                                             ${status === 'available'
@@ -131,7 +160,9 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                                                 <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                                             </div>
                                         ) : null}
-                                        <span className={isLoading ? 'opacity-0' : ''}>{slot}</span>
+                                        <span className={isLoading ? 'opacity-0' : ''}>
+                                            {slot} - {parseInt(slot.split(':')[0]) + 1}:00
+                                        </span>
                                     </button>
                                 );
                             })}
@@ -139,6 +170,19 @@ export const ScheduleManager: React.FC<ScheduleManagerProps> = ({
                     </div>
                 ))}
             </div>
+
+            {/* Modal for Reason */}
+            <DisableSlotModal
+                isOpen={isModalOpen}
+                onClose={() => {
+                    setIsModalOpen(false);
+                    setSlotToDisable(null);
+                }}
+                onConfirm={handleConfirmDisable}
+                timeSlot={slotToDisable?.timeSlot || ''}
+                courtName={slotToDisable?.courtName || ''}
+                date={selectedDate}
+            />
         </div>
     );
 };

@@ -7,9 +7,10 @@ import { ConfirmationModal } from './ConfirmationModal';
 interface ManageVenuesProps {
     venues: Venue[];
     onVenueDeleted: () => void;
+    onEditVenue: (venue: Venue) => void;
 }
 
-export const ManageVenues: React.FC<ManageVenuesProps> = ({ venues, onVenueDeleted }) => {
+export const ManageVenues: React.FC<ManageVenuesProps> = ({ venues, onVenueDeleted, onEditVenue }) => {
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [venueToDelete, setVenueToDelete] = useState<Venue | null>(null);
 
@@ -24,21 +25,8 @@ export const ManageVenues: React.FC<ManageVenuesProps> = ({ venues, onVenueDelet
         const success = await deleteVenue(venueToDelete.id);
 
         if (success) {
-            // Success is handled by MainApp toast ideally, but here we can just callback
-            // We don't have showToast prop here, so we rely on parent refresh or add a local alert/toast?
-            // Since user wants NO native alerts, we should perhaps rely on MainApp to show toast if it monitored this, 
-            // but PerformDelete is local. 
-            // Let's add a simple alert removal by just creating a local state for message or similar? 
-            // Actually ManageVenues is unrelated to MainApp toast state. 
-            // I will assume MainApp can handle the "Deleted" notification if I trigger a refresh, 
-            // but `deleteVenue` returns boolean. 
-            // I'll keep it simple: Callback. MainApp will refresh.
-            // But we need to communicate success/failure to user.
-            // I will assume the user considers the disappearance of the card as success.
-            // Only on error I should warn.
             onVenueDeleted();
         } else {
-            // Ideally show error toast. Since I don't want to drill props right now, I'll log.
             console.error('Failed to delete');
         }
         setIsDeleting(null);
@@ -78,7 +66,14 @@ export const ManageVenues: React.FC<ManageVenuesProps> = ({ venues, onVenueDelet
                                 {venue.address || 'Sin dirección'}
                             </p>
 
-                            <div className="mt-auto pt-4 border-t border-gray-50 flex justify-end">
+                            <div className="mt-auto pt-4 border-t border-gray-50 flex justify-end gap-2">
+                                <button
+                                    onClick={() => onEditVenue(venue)}
+                                    className="flex items-center gap-2 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-4 py-2 rounded-lg font-bold text-sm transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    Editar
+                                </button>
                                 <button
                                     onClick={() => confirmDelete(venue)}
                                     disabled={isDeleting === venue.id}

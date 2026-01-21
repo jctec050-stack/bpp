@@ -242,6 +242,73 @@ export const createVenueWithCourts = async (
     }
 };
 
+export const addCourts = async (venueId: string, courts: Omit<Court, 'id'>[]): Promise<boolean> => {
+    try {
+        const courtsToInsert = courts.map(c => ({
+            venue_id: venueId,
+            name: c.name,
+            type: c.type,
+            price_per_hour: c.pricePerHour
+        }));
+
+        const { error } = await supabase
+            .from('courts')
+            .insert(courtsToInsert);
+
+        if (error) {
+            console.error('❌ Error adding courts:', error);
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.error('❌ Exception adding courts:', error);
+        return false;
+    }
+};
+
+export const updateVenue = async (
+    venueId: string,
+    updates: Partial<Omit<Venue, 'id' | 'courts' | 'ownerId'>>
+): Promise<boolean> => {
+    try {
+        let imageUrl = updates.imageUrl;
+
+        // Handle Image Upload if it's base64 (new image selected)
+        if (imageUrl && imageUrl.startsWith('data:image')) {
+            const user = (await supabase.auth.getUser()).data.user;
+            if (user) {
+                console.log('📤 Uploading new image for venue update...');
+                const uploadedUrl = await uploadVenueImage(imageUrl, user.id);
+                if (uploadedUrl) {
+                    imageUrl = uploadedUrl;
+                }
+            }
+        }
+
+        const { error } = await supabase
+            .from('venues')
+            .update({
+                name: updates.name,
+                address: updates.address,
+                opening_hours: updates.openingHours,
+                image_url: imageUrl,
+                amenities: updates.amenities,
+                contact_info: updates.contactInfo
+            })
+            .eq('id', venueId);
+
+        if (error) {
+            console.error('❌ Error updating venue:', error);
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error('❌ Exception updating venue:', error);
+        return false;
+    }
+};
+
 export const deleteVenue = async (venueId: string): Promise<boolean> => {
     try {
         const { error } = await supabase
@@ -280,13 +347,31 @@ export const cancelBooking = async (bookingId: string): Promise<boolean> => {
     }
 };
 
+export const deleteBooking = async (bookingId: string): Promise<boolean> => {
+    try {
+        const { error } = await supabase
+            .from('bookings')
+            .delete()
+            .eq('id', bookingId);
+
+        if (error) {
+            console.error('❌ Error deleting booking:', error);
+            return false;
+        }
+        return true;
+    } catch (error: any) {
+        console.error('❌ Exception deleting booking:', error);
+        return false;
+    }
+};
+
 export const getBookings = async (): Promise<Booking[]> => {
     const { data: bookings, error } = await supabase
         .from('bookings')
         .select(`
       *,
       venue:venues(name),
-      court:courts(name),
+      court:courts(name, type),
       player:profiles(full_name)
     `);
 
@@ -295,20 +380,60 @@ export const getBookings = async (): Promise<Booking[]> => {
         return [];
     }
 
-    return bookings.map((b: any) => ({
-        id: b.id,
-        venueId: b.venue_id,
-        courtId: b.court_id,
-        venueName: b.venue?.name || 'Unknown',
-        courtName: b.court?.name || 'Unknown',
-        playerName: b.player?.full_name || 'Usuario',
-        date: b.date,
-        startTime: b.start_time,
-        endTime: b.end_time,
-        price: b.price,
-        status: b.status,
-        createdAt: new Date(b.created_at).getTime()
+    const now = new Date();
+    const currentDateTime = now.getTime(); // Current timestamp
+
+    const processedBookings = await Promise.all(bookings.map(async (b: any) => {
+        // Parse booking date and end time
+        // b.date is "YYYY-MM-DD", b.end_time is "HH:mm:ss"
+        const bookingDateTimeStr = `${b.date}T${b.end_time}`;
+        const bookingDate = new Date(bookingDateTimeStr);
+        const bookingTimestamp = bookingDate.getTime();
+
+        let status = b.status;
+
+        // Check if booking is ACTIVE but expired
+        if (status === 'ACTIVE' && bookingTimestamp < currentDateTime) {
+            console.log(`🔄 Auto-closing booking ${b.id} ended at ${bookingDateTimeStr}`);
+
+            // Fire-and-forget update to DB
+            supabase
+                .from('bookings')
+                .update({ status: 'COMPLETED' })
+                .eq('id', b.id)
+                .then(({ error }) => {
+                    // Start of RLS Error Handling
+                    // If we get an error here, it's likely RLS preventing the player from updating the global status.
+                    // This is fine because we already set status = 'COMPLETED' locally for the UI.
+                    // We suppress the error to avoid console noise unless it's critical.
+                    if (error && Object.keys(error).length > 0) {
+                        console.warn('⚠️ Could not persist auto-close to DB (likely permissions/RLS). UI will still show correct status.', error);
+                    }
+                });
+
+            // ALWAYS return COMPLETED for display if the time has passed
+            status = 'COMPLETED';
+        }
+
+        return {
+            id: b.id,
+            venueId: b.venue_id,
+            courtId: b.court_id,
+            venueName: b.venue?.name || 'Unknown',
+            courtName: b.court?.name || 'Unknown',
+            courtType: b.court?.type,
+            playerId: b.player_id, // Add playerId for filtering
+            playerName: b.player?.full_name || 'Usuario',
+            date: b.date,
+            startTime: b.start_time.substring(0, 5), // Normalize to HH:MM
+            endTime: b.end_time.substring(0, 5),     // Normalize to HH:MM
+            price: b.price,
+            status: status,
+            createdAt: new Date(b.created_at).getTime()
+        };
     }));
+
+    return processedBookings;
 };
 
 export const createBooking = async (
@@ -355,7 +480,7 @@ export const getDisabledSlots = async (venueId: string, date: string) => {
         venueId: ds.venue_id,
         courtId: ds.court_id,
         date: ds.date,
-        timeSlot: ds.time_slot,
+        timeSlot: ds.time_slot.substring(0, 5),
         reason: ds.reason
     }));
 };
@@ -364,7 +489,8 @@ export const toggleSlotAvailability = async (
     venueId: string,
     courtId: string,
     date: string,
-    timeSlot: string
+    timeSlot: string,
+    reason: string = ''
 ): Promise<boolean> => {
     // Check if slot is already disabled
     const { data: existing } = await supabase
@@ -394,7 +520,8 @@ export const toggleSlotAvailability = async (
                 venue_id: venueId,
                 court_id: courtId,
                 date: date,
-                time_slot: timeSlot
+                time_slot: timeSlot,
+                reason: reason
             });
 
         if (error) {

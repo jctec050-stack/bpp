@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { UserRole } from '../types';
+import { SuccessModal } from './SuccessModal';
 
 interface RegisterFormProps {
     onRegister: (name: string, email: string, password: string, role: UserRole) => Promise<{ success: boolean; error?: string }>;
@@ -15,6 +16,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
     const [role, setRole] = useState<UserRole>('PLAYER');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -48,11 +50,14 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
         if (!result.success) {
             setError(result.error || 'Error al registrarse');
         } else {
-            // Show success message
-            alert('¡Registro exitoso! Por favor revisa tu email para confirmar tu cuenta y poder iniciar sesión.');
-            // Switch to login view
-            onSwitchToLogin();
+            // Show success modal instead of alert
+            setShowSuccessModal(true);
         }
+    };
+
+    const handleSuccessClose = () => {
+        setShowSuccessModal(false);
+        onSwitchToLogin();
     };
 
     return (
@@ -177,6 +182,14 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitch
                     </p>
                 </div>
             </div>
+
+            <SuccessModal
+                isOpen={showSuccessModal}
+                onClose={handleSuccessClose}
+                title="¡Cuenta Creada!"
+                message="Tu registro ha sido exitoso. Por favor revisa tu email para confirmar tu cuenta y poder iniciar sesión."
+                buttonText="Ir al Login"
+            />
         </div>
     );
 };

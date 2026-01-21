@@ -1,7 +1,7 @@
 
 export type SportType = 'Padel' | 'Beach Tennis';
 export type UserRole = 'OWNER' | 'PLAYER';
-export type BookingStatus = 'ACTIVE' | 'CANCELLED';
+export type BookingStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
 
 export interface Court {
   id: string;
@@ -29,8 +29,10 @@ export interface Booking {
   venueId: string;
   courtId: string;
   courtName: string;
+  courtType?: SportType;
   venueName: string;
   playerName: string;
+  playerId?: string;
   date: string; // ISO format
   startTime: string; // "HH:mm"
   endTime: string; // "HH:mm"

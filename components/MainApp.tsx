@@ -14,7 +14,7 @@ import { AddCourtModal } from '@/components/AddCourtModal';
 import SplashScreen from '@/components/SplashScreen';
 import { ConfirmationModal } from './ConfirmationModal';
 import { useAuth } from '@/AuthContext';
-import { getVenues, createVenueWithCourts, getBookings, createBooking, getDisabledSlots, toggleSlotAvailability, cancelBooking } from '@/services/dataService';
+import { getVenues, createVenueWithCourts, updateVenue, getBookings, createBooking, getDisabledSlots, toggleSlotAvailability, cancelBooking, deleteBooking, addCourts } from '@/services/dataService';
 
 const MainApp: React.FC = () => {
     const { user, login, register, logout, isLoading } = useAuth();
@@ -26,7 +26,7 @@ const MainApp: React.FC = () => {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [showNotifications, setShowNotifications] = useState(false);
     const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
-    const [selectedDate, setSelectedDate] = useState<string>('');
+    const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [authView, setAuthView] = useState<'login' | 'register'>('login');
     const [showAddCourtModal, setShowAddCourtModal] = useState(false);
     const [ownerTab, setOwnerTab] = useState<'dashboard' | 'schedule' | 'venues'>('dashboard');
@@ -39,10 +39,7 @@ const MainApp: React.FC = () => {
         setToast({ message, type });
     };
 
-    // Initialize date
-    useEffect(() => {
-        setSelectedDate(new Date().toISOString().split('T')[0]);
-    }, []);
+    const [venueToEdit, setVenueToEdit] = useState<Venue | null>(null);
 
     // Fetch Data (Venues & Bookings)
     const fetchData = useCallback(async () => {
@@ -56,8 +53,8 @@ const MainApp: React.FC = () => {
         const fetchedBookings = await getBookings();
         setBookings(fetchedBookings);
 
-        // Load Disabled Slots for owners
-        if (user.role === 'OWNER' && fetchedVenues.length > 0) {
+        // Load Disabled Slots (for everyone, so players see blocked times)
+        if (fetchedVenues.length > 0) {
             const fetchedSlots = await getDisabledSlots(fetchedVenues[0].id, selectedDate);
             setDisabledSlots(fetchedSlots);
         }
@@ -81,6 +78,13 @@ const MainApp: React.FC = () => {
         setNotifications(prev => [newNotif, ...prev]);
     }, []);
 
+    const formatTimeRange = (startTime: string) => {
+        const start = startTime.substring(0, 5);
+        const hour = parseInt(startTime.split(':')[0]);
+        const end = `${(hour + 1).toString().padStart(2, '0')}:00`;
+        return `${start} - ${end}`;
+    };
+
     const handleSlotSelect = (venue: Venue, court: Court, time: string) => {
         // Check if slot is already booked (DB)
         const isBooked = bookings.some(b =>
@@ -91,7 +95,13 @@ const MainApp: React.FC = () => {
             b.status === 'ACTIVE'
         );
 
-        if (isBooked) return;
+        const isDisabled = disabledSlots.some(s =>
+            s.venueId === venue.id &&
+            s.courtId === court.id &&
+            s.timeSlot === time
+        );
+
+        if (isBooked || isDisabled) return;
 
         // Toggle selection
         const isSelected = selectedSlots.some(s => s.courtId === court.id && s.time === time);
@@ -131,6 +141,7 @@ const MainApp: React.FC = () => {
         if (successCount > 0) {
             await fetchData();
             addNotification('OWNER', 'Nueva Reserva', `${user.name} ha realizado ${successCount} reserva(s).`);
+            addNotification(user.role, 'Reserva Confirmada', `Has reservado ${successCount} turno(s) correctamente.`);
             showToast(`¡${successCount} reserva(s) confirmada(s)!`, 'success');
             setSelectedSlots([]); // Clear selection
         }
@@ -141,11 +152,12 @@ const MainApp: React.FC = () => {
     };
 
     const getGroupedBookings = (bookings: Booking[]) => {
-        const active = bookings.filter(b => b.status === 'ACTIVE');
+        // Do not filter by ACTIVE, allow all to show history
         const groups: { [key: string]: Booking[] } = {};
 
-        active.forEach(b => {
-            const key = `${b.venueId}-${b.courtId}-${b.date}`;
+        bookings.forEach(b => {
+            // Group by venue, court, date, status AND playerId (unique per user)
+            const key = `${b.venueId}-${b.courtId}-${b.date}-${b.status}-${b.playerId}`;
             if (!groups[key]) groups[key] = [];
             groups[key].push(b);
         });
@@ -166,12 +178,15 @@ const MainApp: React.FC = () => {
                 courtId: first.courtId,
                 venueName: first.venueName,
                 courtName: first.courtName,
+                courtType: first.courtType,
+                playerName: first.playerName,
+                status: first.status, // Add status to group for display
                 date: first.date,
                 startTime: first.startTime,
                 endTime: endTime, // Display range end
                 price: sorted.reduce((sum, b) => sum + b.price, 0),
                 count: sorted.length,
-                timeRange: sorted.length > 1 ? `${first.startTime} - ${endTime}` : `${first.startTime} - 1h`
+                timeRange: `${first.startTime.substring(0, 5)} - ${endTime}`
             };
         });
     };
@@ -183,22 +198,28 @@ const MainApp: React.FC = () => {
     const confirmCancel = async () => {
         if (!bookingToCancel) return;
 
-        let successCount = 0;
-        let failCount = 0;
+        const promises = bookingToCancel.map(async (id) => {
+            const booking = bookings.find(b => b.id === id);
+            if (!booking) return false;
 
-        for (const id of bookingToCancel) {
-            const success = await cancelBooking(id);
-            if (success) successCount++;
-            else failCount++;
-        }
+            if (booking.status === 'CANCELLED') {
+                return await deleteBooking(id);
+            } else {
+                return await cancelBooking(id);
+            }
+        });
+
+        const results = await Promise.all(promises);
+        const successCount = results.filter(r => r).length;
+        const failCount = results.filter(r => !r).length;
 
         if (successCount > 0) {
             await fetchData();
-            showToast(`${successCount} reserva(s) cancelada(s).`, 'success');
+            showToast(`${successCount} reserva(s) actualizadas.`, 'success');
         }
 
         if (failCount > 0) {
-            showToast(`Error al cancelar ${failCount} reserva(s).`, 'error');
+            showToast(`Error al procesar ${failCount} reserva(s). Revisa tu conexión.`, 'error');
         }
         setBookingToCancel(null);
     };
@@ -214,48 +235,102 @@ const MainApp: React.FC = () => {
     ) => {
         if (!user) return;
 
-        console.log('💾 Saving venue...', {
-            venueName,
-            venueAddress,
-            openingHours,
-            imageUrl: imageUrl ? 'Image provided' : 'No image',
-            amenities,
-            contactInfo,
-            newCourts
-        });
-
-        const success = await createVenueWithCourts(
-            {
-                ownerId: user.id,
+        if (venueToEdit) {
+            // Update existing venue
+            const updates: Partial<Omit<Venue, 'id' | 'courts' | 'ownerId'>> = {
                 name: venueName,
                 address: venueAddress,
-                imageUrl: imageUrl,
                 openingHours: openingHours,
+                imageUrl: imageUrl,
                 amenities: amenities,
                 contactInfo: contactInfo
-            },
-            newCourts
-        );
+            };
 
-        console.log('💾 Save result:', success);
+            const success = await updateVenue(venueToEdit.id, updates);
 
-        if (success) {
-            await fetchData();
-            addNotification('OWNER', 'Configuración Guardada', 'Se han actualizado los datos del complejo.');
-            showToast('¡Cambios guardados exitosamente!', 'success');
+            if (success) {
+                // If there are new courts added during edit, create them
+                if (newCourts.length > 0) {
+                    await addCourts(venueToEdit.id, newCourts);
+                }
+                await fetchData();
+                showToast('Complejo actualizado correctamente', 'success');
+                setVenueToEdit(null);
+            } else {
+                showToast('Error al actualizar el complejo', 'error');
+            }
         } else {
-            showToast("Error al guardar el complejo.", 'error');
+            // Create New Venue
+            const success = await createVenueWithCourts(
+                {
+                    ownerId: user.id,
+                    name: venueName,
+                    address: venueAddress,
+                    imageUrl: imageUrl,
+                    openingHours: openingHours,
+                    amenities: amenities,
+                    contactInfo: contactInfo
+                },
+                newCourts
+            );
+
+            if (success) {
+                await fetchData();
+                addNotification('OWNER', 'Configuración Guardada', 'Se han actualizado los datos del complejo.');
+                showToast('¡Complejo creado exitosamente!', 'success');
+            } else {
+                showToast("Error al guardar el complejo.", 'error');
+            }
         }
+        setShowAddCourtModal(false);
     };
 
-    const handleToggleSlot = async (courtId: string, date: string, timeSlot: string) => {
+    const getCombinedHistory = (date: string) => {
+        const dailyBookings = bookings.filter(b => b.date === date);
+        const dailyDisabled = disabledSlots.filter(s => s.date === date);
+
+        const groupedBookings = getGroupedBookings(dailyBookings);
+
+        const disabledItems = dailyDisabled.map(ds => {
+            const court = venues[0]?.courts.find(c => c.id === ds.courtId);
+            const start = ds.timeSlot.substring(0, 5);
+            const hour = parseInt(ds.timeSlot.split(':')[0]);
+            const end = `${(hour + 1).toString().padStart(2, '0')}:00`;
+
+            return {
+                id: [ds.id],
+                venueId: ds.venueId,
+                courtId: ds.courtId,
+                venueName: venues[0]?.name || '',
+                courtName: court?.name || 'Cancha',
+                courtType: court?.type,
+                playerName: ds.reason ? `⛔ BLOQUEO: ${ds.reason}` : '⛔ BLOQUEO (Sin motivo)',
+                status: 'DISABLED',
+                date: ds.date,
+                startTime: ds.timeSlot,
+                endTime: end,
+                price: 0,
+                count: 1,
+                timeRange: `${start} - ${end}`
+            };
+        });
+
+        return [...groupedBookings, ...disabledItems].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    };
+
+    const handleEditVenue = (venue: Venue) => {
+        setVenueToEdit(venue);
+        setShowAddCourtModal(true);
+    };
+
+    const handleToggleSlot = async (courtId: string, date: string, timeSlot: string, reason?: string) => {
         console.log('👆 Toggle Slot clicked:', { courtId, date, timeSlot });
         if (!user || !venues[0]) {
             console.error('❌ Missing user or venue[0]', { user, venue: venues[0] });
             return;
         }
 
-        const success = await toggleSlotAvailability(venues[0].id, courtId, date, timeSlot);
+        const success = await toggleSlotAvailability(venues[0].id, courtId, date, timeSlot, reason);
 
         if (success) {
             // Refresh disabled slots
@@ -358,13 +433,33 @@ const MainApp: React.FC = () => {
                                 <h2 className="text-3xl font-extrabold text-gray-900">Busca tu Cancha</h2>
                                 <p className="text-gray-500 mt-1">Explora complejos de padel y beach tennis cerca de ti.</p>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-2 bg-white px-2 py-1 rounded-xl border border-gray-200 shadow-sm">
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(selectedDate);
+                                        d.setDate(d.getDate() - 1);
+                                        setSelectedDate(d.toISOString().split('T')[0]);
+                                    }}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition text-gray-500"
+                                >
+                                    ←
+                                </button>
                                 <input
                                     type="date"
                                     value={selectedDate}
                                     onChange={(e) => setSelectedDate(e.target.value)}
-                                    className="px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                    className="font-bold text-gray-700 border-none focus:ring-0 cursor-pointer bg-transparent text-sm"
                                 />
+                                <button
+                                    onClick={() => {
+                                        const d = new Date(selectedDate);
+                                        d.setDate(d.getDate() + 1);
+                                        setSelectedDate(d.toISOString().split('T')[0]);
+                                    }}
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition text-gray-500"
+                                >
+                                    →
+                                </button>
                             </div>
                         </div>
 
@@ -416,18 +511,29 @@ const MainApp: React.FC = () => {
                         </div>
 
                         {/* Current Bookings for Player */}
+                        {/* Bookings for Player */}
                         <div className="mt-12">
-                            <h3 className="text-xl font-bold text-gray-900 mb-6">Mis Reservas Actuales</h3>
+                            <h3 className="text-xl font-bold text-gray-900 mb-6">Mis Reservas ({selectedDate})</h3>
                             <div className="space-y-4">
-                                {bookings.filter(b => b.status === 'ACTIVE').length === 0 ? (
+                                {bookings.filter(b => b.date === selectedDate && b.playerId === user?.id).length === 0 ? (
                                     <div className="bg-white p-12 rounded-2xl border border-dashed border-gray-300 text-center text-gray-400">
-                                        Aún no tienes reservas programadas
+                                        No hay reservas para esta fecha
                                     </div>
                                 ) : (
-                                    getGroupedBookings(bookings).map(group => (
+                                    getGroupedBookings(bookings.filter(b => b.date === selectedDate && b.playerId === user?.id)).map(group => (
                                         <div key={group.id[0]} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                                             <div>
-                                                <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">{group.courtName}</p>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">{group.courtName}</p>
+                                                    {bookings.find(b => b.id === group.id[0])?.status !== 'ACTIVE' && (
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${bookings.find(b => b.id === group.id[0])?.status === 'COMPLETED'
+                                                            ? 'bg-blue-100 text-blue-700'
+                                                            : 'bg-red-100 text-red-700'
+                                                            }`}>
+                                                            {bookings.find(b => b.id === group.id[0])?.status === 'COMPLETED' ? 'Completada' : 'Cancelada'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <h4 className="text-lg font-bold text-gray-900">{group.venueName}</h4>
                                                 <div className="flex gap-4 mt-1 text-sm text-gray-500 font-medium">
                                                     <span className="flex items-center gap-1">
@@ -447,12 +553,14 @@ const MainApp: React.FC = () => {
                                             </div>
                                             <div className="flex items-center gap-4 w-full md:w-auto">
                                                 <span className="text-lg font-bold text-gray-900">Gs. {group.price.toLocaleString('es-PY')}</span>
-                                                <button
-                                                    onClick={() => handleCancelClick(group.id)}
-                                                    className="flex-1 md:flex-none px-6 py-2 border border-red-100 text-red-600 font-bold rounded-xl hover:bg-red-50 transition"
-                                                >
-                                                    Cancelar
-                                                </button>
+                                                {bookings.find(b => b.id === group.id[0])?.status === 'ACTIVE' && (
+                                                    <button
+                                                        onClick={() => handleCancelClick(group.id)}
+                                                        className="flex-1 md:flex-none px-6 py-2 border border-red-100 text-red-600 font-bold rounded-xl hover:bg-red-50 transition"
+                                                    >
+                                                        Cancelar
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     ))
@@ -574,23 +682,31 @@ const MainApp: React.FC = () => {
                                                         b.status === 'ACTIVE'
                                                     );
 
+                                                    const isDisabled = disabledSlots.some(s =>
+                                                        s.venueId === selectedVenue.id &&
+                                                        s.courtId === court.id &&
+                                                        s.timeSlot === slot
+                                                    );
+
+                                                    const isUnavailable = isBooked || isDisabled;
+
                                                     const isSelected = selectedSlots.some(s => s.courtId === court.id && s.time === slot);
 
                                                     return (
                                                         <button
                                                             key={slot}
-                                                            disabled={isBooked}
+                                                            disabled={isUnavailable}
                                                             onClick={() => handleSlotSelect(selectedVenue, court, slot)}
                                                             className={`
                                 py-3 rounded-xl font-bold text-sm transition-all
-                                ${isBooked
+                                ${isUnavailable
                                                                     ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200 line-through'
                                                                     : isSelected
                                                                         ? 'bg-indigo-600 text-white shadow-lg scale-105 ring-2 ring-indigo-300'
                                                                         : 'bg-white border-2 border-indigo-100 text-indigo-600 hover:border-indigo-600 hover:bg-indigo-50 shadow-sm active:scale-95'}
                               `}
                                                         >
-                                                            {slot}
+                                                            {slot} - {parseInt(slot.split(':')[0]) + 1}:00
                                                         </button>
                                                     );
                                                 })}
@@ -676,7 +792,14 @@ const MainApp: React.FC = () => {
                         </div>
 
                         {/* Tab Content */}
-                        {ownerTab === 'dashboard' && venues.length > 0 && <OwnerDashboard bookings={bookings} venue={venues[0]} />}
+                        {ownerTab === 'dashboard' && venues.length > 0 &&
+                            <OwnerDashboard
+                                bookings={bookings}
+                                venue={venues[0]}
+                                selectedDate={selectedDate}
+                                onDateChange={setSelectedDate}
+                            />
+                        }
 
                         {ownerTab === 'schedule' && venues.length > 0 && (
                             <ScheduleManager
@@ -684,6 +807,8 @@ const MainApp: React.FC = () => {
                                 bookings={bookings}
                                 disabledSlots={disabledSlots}
                                 onToggleSlot={handleToggleSlot}
+                                selectedDate={selectedDate}
+                                onDateChange={setSelectedDate}
                             />
                         )}
 
@@ -691,6 +816,7 @@ const MainApp: React.FC = () => {
                             <ManageVenues
                                 venues={venues}
                                 onVenueDeleted={fetchData}
+                                onEditVenue={handleEditVenue}
                             />
                         )}
 
@@ -715,14 +841,7 @@ const MainApp: React.FC = () => {
 
                         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
                             <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-                                <h4 className="text-lg font-bold text-gray-900">Todas las Reservas</h4>
-                                <div className="flex gap-2">
-                                    <select className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium outline-none">
-                                        <option>Hoy</option>
-                                        <option>Últimos 7 días</option>
-                                        <option>Este Mes</option>
-                                    </select>
-                                </div>
+                                <h4 className="text-lg font-bold text-gray-900">Todas las Reservas ({selectedDate})</h4>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left">
@@ -737,35 +856,59 @@ const MainApp: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
-                                        {bookings.length === 0 ? (
+                                        {getCombinedHistory(selectedDate).length === 0 ? (
                                             <tr>
-                                                <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic">No hay registros de reservas aún</td>
+                                                <td colSpan={6} className="px-6 py-12 text-center text-gray-400 italic">No hay registros de reservas ni bloqueos para esta fecha</td>
                                             </tr>
                                         ) : (
-                                            bookings.map(b => (
-                                                <tr key={b.id} className="hover:bg-gray-50/50 transition">
-                                                    <td className="px-6 py-4 font-bold text-gray-700">{b.playerName}</td>
+                                            getCombinedHistory(selectedDate).map(group => (
+                                                <tr key={group.id[0]} className="hover:bg-gray-50/50 transition">
+                                                    <td className="px-6 py-4 font-bold text-gray-700">
+                                                        {group.status === 'DISABLED' ? (
+                                                            <span className="text-gray-500 italic">{group.playerName}</span>
+                                                        ) : (
+                                                            group.playerName
+                                                        )}
+                                                    </td>
                                                     <td className="px-6 py-4">
-                                                        <span className="text-sm text-gray-600 font-medium">{b.courtName}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm text-gray-600 font-medium">{group.courtName}</span>
+                                                            {group.courtType && (
+                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${group.courtType === 'Padel'
+                                                                        ? 'bg-indigo-100 text-indigo-700'
+                                                                        : 'bg-orange-100 text-orange-700'
+                                                                    }`}>
+                                                                    {group.courtType}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="text-sm">
-                                                            <p className="font-bold text-gray-900">{b.date}</p>
-                                                            <p className="text-gray-500">{b.startTime} - 1h</p>
+                                                            <p className="font-bold text-gray-900">{group.date}</p>
+                                                            <p className="text-gray-500">{group.timeRange} {group.count > 1 ? `(${group.count} turnos)` : ''}</p>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4 font-bold text-indigo-600">${b.price}</td>
+                                                    <td className="px-6 py-4 font-bold text-indigo-600">
+                                                        {group.status === 'DISABLED' ? '-' : `$${group.price}`}
+                                                    </td>
                                                     <td className="px-6 py-4">
-                                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${b.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${group.status === 'ACTIVE'
+                                                            ? 'bg-green-100 text-green-700'
+                                                            : group.status === 'COMPLETED'
+                                                                ? 'bg-blue-100 text-blue-700'
+                                                                : group.status === 'DISABLED'
+                                                                    ? 'bg-gray-200 text-gray-600'
+                                                                    : 'bg-red-100 text-red-700'
                                                             }`}>
-                                                            {b.status === 'ACTIVE' ? 'Activa' : 'Cancelada'}
+                                                            {group.status === 'ACTIVE' ? 'Activa' : group.status === 'COMPLETED' ? 'Completada' : group.status === 'DISABLED' ? 'Bloqueado' : 'Cancelada'}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <button
-                                                            onClick={() => handleCancelClick([b.id])}
+                                                            onClick={() => group.status === 'DISABLED' ? handleToggleSlot(group.courtId, group.date, group.startTime) : handleCancelClick(group.id)}
                                                             className="text-gray-400 hover:text-red-600 transition"
-                                                            title="Cancelar Reserva"
+                                                            title={group.status === 'ACTIVE' ? "Cancelar Reserva" : group.status === 'DISABLED' ? "Habilitar Horario" : "Eliminar Reserva"}
                                                         >
                                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                         </button>
@@ -784,12 +927,12 @@ const MainApp: React.FC = () => {
             {/* Add Court Modal */}
             {showAddCourtModal && (
                 <AddCourtModal
-                    currentVenueName={venues[0]?.name || ''}
-                    currentVenueAddress={venues[0]?.address || ''}
-                    currentOpeningHours={venues[0]?.openingHours || '08:00 - 22:00'}
-                    currentImageUrl={venues[0]?.imageUrl || ''}
-                    currentAmenities={venues[0]?.amenities || []}
-                    currentContactInfo={venues[0]?.contactInfo || ''}
+                    currentVenueName={venueToEdit?.name || ''}
+                    currentVenueAddress={venueToEdit?.address || ''}
+                    currentOpeningHours={venueToEdit?.openingHours || '08:00 - 22:00'}
+                    currentImageUrl={venueToEdit?.imageUrl || ''}
+                    currentAmenities={venueToEdit?.amenities || []}
+                    currentContactInfo={venueToEdit?.contactInfo || ''}
                     onClose={() => setShowAddCourtModal(false)}
                     onSave={handleSaveVenue}
                 />
@@ -806,7 +949,8 @@ const MainApp: React.FC = () => {
                 onConfirm={confirmCancel}
                 onCancel={() => setBookingToCancel(null)}
             />
+            {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </div>
-    )
-}
+    );
+};
 export default MainApp;

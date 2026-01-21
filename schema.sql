@@ -40,7 +40,7 @@ create table public.bookings (
   start_time time not null,
   end_time time not null,
   price numeric not null,
-  status text check (status in ('ACTIVE', 'CANCELLED')) default 'ACTIVE',
+  status text check (status in ('ACTIVE', 'CANCELLED', 'COMPLETED')) default 'ACTIVE',
   created_at timestamptz default now()
 );
 
