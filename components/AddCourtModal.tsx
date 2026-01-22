@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { SportType, Court } from '../types';
+import { uploadCourtImage } from '../services/dataService';
 
 interface AddCourtModalProps {
     currentVenueName: string;
@@ -325,13 +326,48 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
                                     className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
                                 />
                             </div>
+
+                            {/* Court Image Input */}
+                            <div className="md:col-span-6">
+                                <label className="block text-xs font-bold text-indigo-800 mb-1">Foto de la Cancha (Opcional)</label>
+                                <div className="flex items-center gap-4">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                if (file.size > 5 * 1024 * 1024) {
+                                                    setError('Imagen muy grande (max 5MB)');
+                                                    return;
+                                                }
+                                                setCourtImageFile(file);
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => setCourtImagePreview(reader.result as string);
+                                                reader.readAsDataURL(file);
+                                            }
+                                        }}
+                                        className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                                    />
+                                    {courtImagePreview && (
+                                        <div className="h-10 w-16 rounded overflow-hidden border border-gray-200">
+                                            <img src={courtImagePreview} alt="Preview" className="h-full w-full object-cover" />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                             <div className="md:col-span-2">
                                 <button
                                     type="button"
                                     onClick={handleAddCourtToList}
-                                    className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition shadow-md"
+                                    disabled={isUploadingCourt}
+                                    className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
                                 >
-                                    + Agregar
+                                    {isUploadingCourt ? (
+                                        <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></span>
+                                    ) : (
+                                        '+ Agregar'
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -345,7 +381,13 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
                                 {currentCourts.filter(c => !courtsToDelete.includes(c.id)).map((court) => (
                                     <div key={court.id} className="flex items-center justify-between bg-white border border-gray-200 p-3 rounded-xl shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            <span className={`w-2 h-8 rounded-full ${court.type === 'Padel' ? 'bg-indigo-500' : 'bg-orange-400'}`}></span>
+                                            {court.imageUrl ? (
+                                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
+                                                    <img src={court.imageUrl} alt={court.name} className="w-full h-full object-cover" />
+                                                </div>
+                                            ) : (
+                                                <span className={`w-2 h-8 rounded-full ${court.type === 'Padel' ? 'bg-indigo-500' : 'bg-orange-400'}`}></span>
+                                            )}
                                             <div>
                                                 <p className="font-bold text-gray-900">{court.name}</p>
                                                 <p className="text-xs text-gray-500">{court.type} • Gs. {formatNumber(court.pricePerHour)}</p>
@@ -372,7 +414,13 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
                                 {pendingCourts.map((court, idx) => (
                                     <div key={idx} className="flex items-center justify-between bg-white border border-gray-200 p-3 rounded-xl shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            <span className={`w-2 h-8 rounded-full ${court.type === 'Padel' ? 'bg-indigo-500' : 'bg-orange-400'}`}></span>
+                                            {court.imageUrl ? (
+                                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
+                                                    <img src={court.imageUrl} alt={court.name} className="w-full h-full object-cover" />
+                                                </div>
+                                            ) : (
+                                                <span className={`w-2 h-8 rounded-full ${court.type === 'Padel' ? 'bg-indigo-500' : 'bg-orange-400'}`}></span>
+                                            )}
                                             <div>
                                                 <p className="font-bold text-gray-900">{court.name}</p>
                                                 <p className="text-xs text-gray-500">{court.type} • Gs. {formatNumber(court.pricePerHour)}</p>
