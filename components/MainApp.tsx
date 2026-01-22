@@ -32,6 +32,7 @@ const MainApp: React.FC = () => {
     const [showAddCourtModal, setShowAddCourtModal] = useState(false);
     const [ownerTab, setOwnerTab] = useState<'dashboard' | 'schedule' | 'venues'>('dashboard');
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     const [selectedSlots, setSelectedSlots] = useState<{ courtId: string, time: string, price: number, courtName: string }[]>([]);
     const [bookingToCancel, setBookingToCancel] = useState<string[] | null>(null);
@@ -492,14 +493,31 @@ const MainApp: React.FC = () => {
                         <span className="text-sm font-medium text-gray-700">{user.name}</span>
                     </div>
                     <button
-                        onClick={logout}
-                        className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition touch-manipulation"
+                        onClick={async () => {
+                            setIsLoggingOut(true);
+                            try {
+                                await logout();
+                            } catch (error) {
+                                console.error('Logout error:', error);
+                                showToast('Error al cerrar sesión', 'error');
+                                setIsLoggingOut(false);
+                            }
+                        }}
+                        disabled={isLoggingOut}
+                        className="flex items-center gap-1 md:gap-2 px-2 md:px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Cerrar sesión"
                     >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                        </svg>
-                        <span className="hidden md:inline">Salir</span>
+                        {isLoggingOut ? (
+                            <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                        )}
+                        <span className="hidden md:inline">{isLoggingOut ? 'Saliendo...' : 'Salir'}</span>
                     </button>
                 </div>
             </nav>
