@@ -211,43 +211,6 @@ const checkSystemHealth = async () => {
     return results;
 };
 
-// 2. Check DB Read
-try {
-    console.log('💾 Verifying Database Connection...');
-    const { error: dbError } = await supabase.from('venues').select('id').limit(1);
-    if (!dbError) {
-        console.log('✅ DB: Connection successful');
-        results.db = true;
-    } else {
-        console.error('❌ DB: Connection failed:', dbError.message);
-    }
-} catch (e) {
-    console.error('❌ DB: Exception:', e);
-}
-
-// 3. Check Storage
-try {
-    console.log('📦 Verifying Storage...');
-    const { data: buckets, error: storageError } = await supabase.storage.listBuckets();
-    if (!storageError) {
-        console.log('✅ Storage: Listed buckets:', buckets?.map(b => b.name));
-        const venuesBucket = buckets?.find(b => b.name === 'venues');
-        if (venuesBucket) {
-            console.log('✅ Storage: "venues" bucket exists');
-            results.storage = true;
-        } else {
-            console.error('❌ Storage: "venues" bucket MISSING');
-        }
-    } else {
-        console.error('❌ Storage: List buckets failed:', storageError.message);
-    }
-} catch (e) {
-    console.error('❌ Storage: Exception:', e);
-}
-
-return results;
-};
-
 export const createVenueWithCourts = async (
     venue: Omit<Venue, 'id' | 'courts'>,
     courts: Omit<Court, 'id'>[]
