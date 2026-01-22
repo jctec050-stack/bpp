@@ -82,7 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const timeoutId = setTimeout(() => {
             console.warn('⚠️ Session init timeout - forcing loading to false');
             setIsLoading(false);
-        }, 10000); // 10 second timeout
+        }, 5000); // 5 second timeout
 
         initSession().then(() => {
             clearTimeout(timeoutId);
