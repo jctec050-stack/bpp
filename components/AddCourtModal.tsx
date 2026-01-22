@@ -95,6 +95,13 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
         if (courtImageFile) {
             // Use a temporary ID for the filename
             const tempId = `new-${Date.now()}`;
+
+            // Compress generic file before upload, optimization
+            // NOTE: We rely on the file selection to have already compressed it or we do it here?
+            // Actually it's better to do it at selection time for UI responsiveness, 
+            // BUT doing it here ensures we upload the compressed version.
+            // Let's rely on the state 'courtImageFile' already being the compressed version from the onChange handler.
+
             const publicUrl = await uploadCourtImage(courtImageFile, tempId);
             if (publicUrl) {
                 uploadedImageUrl = publicUrl;
@@ -360,17 +367,21 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
                                     <input
                                         type="file"
                                         accept="image/*"
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
                                             const file = e.target.files?.[0];
                                             if (file) {
-                                                if (file.size > 5 * 1024 * 1024) {
-                                                    setError('Imagen muy grande (max 5MB)');
-                                                    return;
+                                                try {
+                                                    // Compress image before setting state
+                                                    const compressedFile = await compressImage(file);
+                                                    setCourtImageFile(compressedFile);
+
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => setCourtImagePreview(reader.result as string);
+                                                    reader.readAsDataURL(compressedFile);
+                                                } catch (err) {
+                                                    console.error('Error compressing image:', err);
+                                                    setError('Error al procesar la imagen.');
                                                 }
-                                                setCourtImageFile(file);
-                                                const reader = new FileReader();
-                                                reader.onloadend = () => setCourtImagePreview(reader.result as string);
-                                                reader.readAsDataURL(file);
                                             }
                                         }}
                                         className="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
