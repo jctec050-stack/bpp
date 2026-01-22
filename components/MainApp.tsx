@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import packageJson from '../package.json';
 import { Venue, Booking, Notification, Court, DisabledSlot } from '@/types';
 import { TIME_SLOTS } from '@/constants';
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -1017,7 +1018,7 @@ const MainApp: React.FC = () => {
 
             {/* Version Display - Footer */}
             <div className="fixed bottom-2 right-2 text-xs text-gray-400 bg-white/80 backdrop-blur px-2 py-1 rounded-lg shadow-sm">
-                v1.0.0
+                v{packageJson.version}
             </div>
 
             {/* Add Court Modal */}
