@@ -21,6 +21,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const fetchProfile = async (userId: string, email: string) => {
         try {
+            console.log('👤 Fetching profile for user:', userId);
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -28,11 +29,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 .maybeSingle();
 
             if (error) {
-                console.error('Error fetching profile:', error);
+                console.error('❌ Error fetching profile:', error);
                 return;
             }
 
             if (data) {
+                console.log('✅ Profile loaded:', data.full_name);
                 setUser({
                     id: userId,
                     email: email,
@@ -41,27 +43,54 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 });
             } else {
                 // Profile doesn't exist yet (might be waiting for trigger)
-                console.log('Profile not found yet for user:', userId);
+                console.log('⚠️ Profile not found yet for user:', userId);
             }
         } catch (e) {
-            console.error('Exception fetching profile:', e);
+            console.error('❌ Exception fetching profile:', e);
         }
     };
 
     useEffect(() => {
         // Check active session
         const initSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user?.email) {
-                await fetchProfile(session.user.id, session.user.email);
+            try {
+                console.log('🔐 Initializing session...');
+                const { data: { session }, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    console.error('❌ Session error:', error);
+                    setIsLoading(false);
+                    return;
+                }
+
+                if (session?.user?.email) {
+                    console.log('✅ Session found, fetching profile...');
+                    await fetchProfile(session.user.id, session.user.email);
+                } else {
+                    console.log('ℹ️ No active session');
+                }
+            } catch (error) {
+                console.error('❌ Exception during session init:', error);
+            } finally {
+                // Always set loading to false, even if there's an error
+                setIsLoading(false);
+                console.log('✅ Session initialization complete');
             }
-            setIsLoading(false);
         };
 
-        initSession();
+        // Set a safety timeout to prevent infinite loading
+        const timeoutId = setTimeout(() => {
+            console.warn('⚠️ Session init timeout - forcing loading to false');
+            setIsLoading(false);
+        }, 10000); // 10 second timeout
+
+        initSession().then(() => {
+            clearTimeout(timeoutId);
+        });
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('🔄 Auth state changed:', event);
             if (event === 'SIGNED_IN' && session?.user?.email) {
                 await fetchProfile(session.user.id, session.user.email);
             } else if (event === 'SIGNED_OUT') {
@@ -70,6 +99,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         return () => {
+            clearTimeout(timeoutId);
             subscription.unsubscribe();
         };
     }, []);
