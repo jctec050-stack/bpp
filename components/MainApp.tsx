@@ -14,6 +14,7 @@ import { RegisterForm } from '@/components/RegisterForm';
 import { AddCourtModal } from '@/components/AddCourtModal';
 import SplashScreen from '@/components/SplashScreen';
 import { ConfirmationModal } from './ConfirmationModal';
+import { CourtCard } from './CourtCard';
 import { useAuth } from '@/AuthContext';
 import { getVenues, createVenueWithCourts, updateVenue, getBookings, createBooking, getDisabledSlots, toggleSlotAvailability, cancelBooking, deleteBooking, addCourts, deleteCourt } from '@/services/dataService';
 
@@ -43,6 +44,7 @@ const MainApp: React.FC = () => {
     const [venueToEdit, setVenueToEdit] = useState<Venue | null>(null);
     const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [locationPermission, setLocationPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
+    const [selectedPlayerCourtId, setSelectedPlayerCourtId] = useState<string | null>(null);
 
     // Fetch Data (Venues & Bookings)
     const fetchData = useCallback(async () => {
@@ -692,7 +694,10 @@ const MainApp: React.FC = () => {
                 {user.role === 'PLAYER' && selectedVenue && (
                     <div className="max-w-4xl mx-auto">
                         <button
-                            onClick={() => setSelectedVenue(null)}
+                            onClick={() => {
+                                setSelectedVenue(null);
+                                setSelectedPlayerCourtId(null);
+                            }}
                             className="mb-6 flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition font-medium"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
@@ -781,57 +786,96 @@ const MainApp: React.FC = () => {
                                 </div>
 
                                 <div className="space-y-10">
-                                    {selectedVenue.courts.map(court => (
-                                        <div key={court.id} className="animate-in fade-in duration-500">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <h4 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                                                    <div className={`w-2 h-6 rounded-full ${court.type === 'Padel' ? 'bg-indigo-500' : 'bg-orange-400'}`}></div>
-                                                    {court.name}
-                                                    <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded ml-2">{court.type}</span>
+                                    <div className="space-y-10">
+                                        {!selectedPlayerCourtId ? (
+                                            // View 1: Court Selection Grid
+                                            <div>
+                                                <h4 className="font-bold text-gray-900 mb-6 flex items-center gap-2 text-xl">
+                                                    Elegí tu Cancha
                                                 </h4>
-                                                <span className="text-indigo-600 font-bold">Gs. {court.pricePerHour.toLocaleString('es-PY')}/h</span>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                                    {selectedVenue.courts.map(court => (
+                                                        <CourtCard
+                                                            key={court.id}
+                                                            court={court}
+                                                            isSelected={false}
+                                                            onSelect={() => setSelectedPlayerCourtId(court.id)}
+                                                        />
+                                                    ))}
+                                                </div>
                                             </div>
-                                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                                                {TIME_SLOTS.map(slot => {
-                                                    const isBooked = bookings.some(b =>
-                                                        b.venueId === selectedVenue.id &&
-                                                        b.courtId === court.id &&
-                                                        b.date === selectedDate &&
-                                                        b.startTime === slot &&
-                                                        b.status === 'ACTIVE'
-                                                    );
+                                        ) : (
+                                            // View 2: Schedule for Selected Court
+                                            selectedVenue.courts.filter(c => c.id === selectedPlayerCourtId).map(court => (
+                                                <div key={court.id} className="animate-in fade-in slide-in-from-right-8 duration-300">
+                                                    <button
+                                                        onClick={() => setSelectedPlayerCourtId(null)}
+                                                        className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 font-bold mb-6 transition"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                                        </svg>
+                                                        Volver a selección de canchas
+                                                    </button>
 
-                                                    const isDisabled = disabledSlots.some(s =>
-                                                        s.venueId === selectedVenue.id &&
-                                                        s.courtId === court.id &&
-                                                        s.timeSlot === slot
-                                                    );
+                                                    <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+                                                        <h4 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                                                            {court.imageUrl && (
+                                                                <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
+                                                                    <img src={court.imageUrl} alt={court.name} className="w-full h-full object-cover" />
+                                                                </div>
+                                                            )}
+                                                            {court.name}
+                                                            <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded ml-2">{court.type}</span>
+                                                        </h4>
+                                                        <span className="text-indigo-600 font-bold bg-indigo-50 px-4 py-2 rounded-xl">
+                                                            Gs. {court.pricePerHour.toLocaleString('es-PY')}/h
+                                                        </span>
+                                                    </div>
 
-                                                    const isUnavailable = isBooked || isDisabled;
+                                                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                                                        {TIME_SLOTS.map(slot => {
+                                                            const isBooked = bookings.some(b =>
+                                                                b.venueId === selectedVenue.id &&
+                                                                b.courtId === court.id &&
+                                                                b.date === selectedDate &&
+                                                                b.startTime === slot &&
+                                                                b.status === 'ACTIVE'
+                                                            );
 
-                                                    const isSelected = selectedSlots.some(s => s.courtId === court.id && s.time === slot);
+                                                            const isDisabled = disabledSlots.some(s =>
+                                                                s.venueId === selectedVenue.id &&
+                                                                s.courtId === court.id &&
+                                                                s.timeSlot === slot
+                                                            );
 
-                                                    return (
-                                                        <button
-                                                            key={slot}
-                                                            disabled={isUnavailable}
-                                                            onClick={() => handleSlotSelect(selectedVenue, court, slot)}
-                                                            className={`
-                                py-3 rounded-xl font-bold text-sm transition-all
-                                ${isUnavailable
-                                                                    ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200 line-through'
-                                                                    : isSelected
-                                                                        ? 'bg-indigo-600 text-white shadow-lg scale-105 ring-2 ring-indigo-300'
-                                                                        : 'bg-white border-2 border-indigo-100 text-indigo-600 hover:border-indigo-600 hover:bg-indigo-50 shadow-sm active:scale-95'}
-                              `}
-                                                        >
-                                                            {slot} - {parseInt(slot.split(':')[0]) + 1}:00
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    ))}
+                                                            const isUnavailable = isBooked || isDisabled;
+
+                                                            const isSelected = selectedSlots.some(s => s.courtId === court.id && s.time === slot);
+
+                                                            return (
+                                                                <button
+                                                                    key={slot}
+                                                                    disabled={isUnavailable}
+                                                                    onClick={() => handleSlotSelect(selectedVenue, court, slot)}
+                                                                    className={`
+                                                                    py-3 rounded-xl font-bold text-sm transition-all
+                                                                    ${isUnavailable
+                                                                            ? 'bg-gray-100 text-gray-300 cursor-not-allowed border border-gray-200 line-through'
+                                                                            : isSelected
+                                                                                ? 'bg-indigo-600 text-white shadow-lg scale-105 ring-2 ring-indigo-300'
+                                                                                : 'bg-white border-2 border-indigo-100 text-indigo-600 hover:border-indigo-600 hover:bg-indigo-50 shadow-sm active:scale-95'}
+                                                                `}
+                                                                >
+                                                                    {slot}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
