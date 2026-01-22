@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { SportType, Court } from '../types';
 import { uploadCourtImage } from '../services/dataService';
+import { compressImage } from '../utils/imageUtils';
 
 interface AddCourtModalProps {
     currentVenueName: string;
