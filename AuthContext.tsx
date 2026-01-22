@@ -78,15 +78,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         };
 
-        // Set a safety timeout to prevent infinite loading
-        const timeoutId = setTimeout(() => {
-            console.warn('⚠️ Session init timeout - forcing loading to false');
-            setIsLoading(false);
-        }, 15000); // 15 second timeout - enough for slow connections
-
-        initSession().then(() => {
-            clearTimeout(timeoutId);
-        });
+        initSession();
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -99,7 +91,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         return () => {
-            clearTimeout(timeoutId);
             subscription.unsubscribe();
         };
     }, []);
