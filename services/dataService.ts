@@ -233,22 +233,6 @@ export const createVenueWithCourts = async (
         }
     }
 
-    // Handle Image Upload if it's base64
-    if (imageUrl && imageUrl.startsWith('data:image')) {
-        console.log('📤 Uploading image to storage (Optimistic check)...');
-
-        // Try uploading even if health.storage is false (Bucket might exist but be hidden from list)
-        const uploadedUrl = await uploadVenueImage(imageUrl, venue.ownerId);
-
-        if (uploadedUrl) {
-            console.log('✅ Image uploaded successfully:', uploadedUrl);
-            imageUrl = uploadedUrl;
-        } else {
-            console.warn('⚠️ Image upload failed, saving without image');
-            imageUrl = '';
-        }
-    }
-
     // Geocode address to get coordinates
     let latitude: number | null = null;
     let longitude: number | null = null;
