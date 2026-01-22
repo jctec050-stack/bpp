@@ -197,30 +197,8 @@ export const createVenueWithCourts = async (
     venue: Omit<Venue, 'id' | 'courts'>,
     courts: Omit<Court, 'id'>[]
 ): Promise<boolean> => {
-    // Run Pre-flight Check
-    const health = await checkSystemHealth();
-    if (!health.db) {
-        console.error('Error de conexión con la Base de Datos. Revisa tu internet o la configuración de Supabase.');
-        return false;
-    }
-
-    let imageUrl = venue.imageUrl;
-
-    // Handle Image Upload if it's base64
-    if (imageUrl && imageUrl.startsWith('data:image')) {
-        console.log('📤 Uploading image to storage (Optimistic check)...');
-
-        // Try uploading even if health.storage is false (Bucket might exist but be hidden from list)
-        const uploadedUrl = await uploadVenueImage(imageUrl, venue.ownerId);
-
-        if (uploadedUrl) {
-            console.log('✅ Image uploaded successfully:', uploadedUrl);
-            imageUrl = uploadedUrl;
-        } else {
-            console.warn('⚠️ Image upload failed, saving without image');
-            imageUrl = '';
-        }
-    }
+    // Store image as base64 directly (no upload to storage)
+    const imageUrl = venue.imageUrl || '';
 
     // Geocode address to get coordinates
     let latitude: number | null = null;
