@@ -243,10 +243,9 @@ export const createVenueWithCourts = async (
     }
 
     try {
-        console.log('📝 Attempting to insert venue into DB (Image URL length: ' + imageUrl.length + ')');
+        console.log('📝 Inserting venue into DB (Image URL length: ' + imageUrl.length + ')');
 
-        // Create insert promise
-        const insertPromise = supabase
+        const { data: venueData, error: venueError } = await supabase
             .from('venues')
             .insert({
                 owner_id: venue.ownerId,
@@ -262,19 +261,9 @@ export const createVenueWithCourts = async (
             .select()
             .single();
 
-        // Create timeout promise (10 seconds)
-        const dbTimeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout: Database insert took too long. Likely RLS or Network issue.')), 10000)
-        );
-
-        // Race them
-        console.log('⏳ Starting DB Insert with 10s timeout...');
-        const { data: venueData, error: venueError } = await Promise.race([insertPromise, dbTimeoutPromise]) as any;
-
-        console.log('📝 DB Insert response:', { venueData, venueError });
-
         if (venueError) {
             console.error('❌ Error creating venue:', venueError);
+            alert(`Error al crear complejo: ${venueError.message}. Verifica las políticas RLS en Supabase.`);
             return false;
         }
 
