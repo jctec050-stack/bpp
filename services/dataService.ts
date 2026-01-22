@@ -10,6 +10,25 @@ export const uploadCourtImage = async (file: File, courtId: string): Promise<str
 
         console.log(`⏳ Starting upload to "court-images" bucket... File size: ${fileSizeMB} MB`);
 
+        // Check if bucket exists first
+        console.log('🔍 Checking if "court-images" bucket exists...');
+        const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
+
+        if (bucketError) {
+            console.error('❌ Error listing buckets:', bucketError);
+            return null;
+        }
+
+        const courtImagesBucket = buckets?.find(b => b.name === 'court-images');
+        if (!courtImagesBucket) {
+            console.error('❌ CRITICAL: "court-images" bucket does NOT exist!');
+            console.log('Available buckets:', buckets?.map(b => b.name));
+            alert('Error: El bucket "court-images" no existe en Supabase. Por favor contacta al administrador.');
+            return null;
+        }
+
+        console.log('✅ Bucket exists, proceeding with upload...');
+
         // Create upload promise
         const uploadPromise = supabase.storage
             .from('court-images')
@@ -31,6 +50,7 @@ export const uploadCourtImage = async (file: File, courtId: string): Promise<str
             return null;
         }
 
+        console.log('✅ Upload successful!');
         const { data: { publicUrl } } = supabase.storage
             .from('court-images')
             .getPublicUrl(fileName);

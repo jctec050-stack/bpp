@@ -178,20 +178,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const logout = async () => {
+        // Optimistic logout: clear state immediately for instant UI response
+        console.log('🚪 Logging out...');
+        setUser(null);
+
+        // Sign out in background
         try {
-            console.log('🚪 Logging out...');
             const { error } = await supabase.auth.signOut();
             if (error) {
-                console.error('❌ Logout error:', error);
-                throw error;
+                console.error('❌ Logout error (background):', error);
+            } else {
+                console.log('✅ Logout successful');
             }
-            setUser(null);
-            console.log('✅ Logout successful');
         } catch (error) {
-            console.error('❌ Exception during logout:', error);
-            // Even if there's an error, clear the user state locally
-            setUser(null);
-            throw error; // Re-throw so the UI can handle it
+            console.error('❌ Exception during logout (background):', error);
         }
     };
 

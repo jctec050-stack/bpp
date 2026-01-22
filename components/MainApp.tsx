@@ -92,7 +92,7 @@ const MainApp: React.FC = () => {
             }
         };
         fetchDisabledSlotsForDate();
-    }, [selectedDate, venues]);
+    }, [selectedDate]); // Removed venues to prevent infinite loop
 
     // Request user location for proximity sorting
     useEffect(() => {
