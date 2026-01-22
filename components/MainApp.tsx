@@ -59,8 +59,10 @@ const MainApp: React.FC = () => {
             setBookings(fetchedBookings);
 
             // Load Disabled Slots (for everyone, so players see blocked times)
+            // Use current selectedDate value directly, don't add as dependency
             if (fetchedVenues.length > 0) {
-                const fetchedSlots = await getDisabledSlots(fetchedVenues[0].id, selectedDate);
+                const currentDate = new Date().toISOString().split('T')[0];
+                const fetchedSlots = await getDisabledSlots(fetchedVenues[0].id, currentDate);
                 setDisabledSlots(fetchedSlots);
             }
             console.log('✅ Data fetched successfully');
@@ -68,11 +70,26 @@ const MainApp: React.FC = () => {
             console.error('❌ Error fetching data:', error);
             showToast('Error al cargar datos. Por favor recarga la página.', 'error');
         }
-    }, [user, selectedDate]);
+    }, [user]); // Removed selectedDate from dependencies
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
+
+    // Fetch disabled slots when date changes
+    useEffect(() => {
+        const fetchDisabledSlotsForDate = async () => {
+            if (venues.length > 0 && selectedDate) {
+                try {
+                    const fetchedSlots = await getDisabledSlots(venues[0].id, selectedDate);
+                    setDisabledSlots(fetchedSlots);
+                } catch (error) {
+                    console.error('Error fetching disabled slots:', error);
+                }
+            }
+        };
+        fetchDisabledSlotsForDate();
+    }, [selectedDate, venues]);
 
     // Request user location for proximity sorting
     useEffect(() => {
