@@ -174,7 +174,7 @@ const checkSystemHealth = async () => {
     console.log('🔐 Verifying Auth Session...');
     try {
         const authPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('Auth Timeout'), 5000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('Auth Timeout'), 15000));
 
         const { data: { session } } = await Promise.race([authPromise, timeoutPromise]) as any;
 

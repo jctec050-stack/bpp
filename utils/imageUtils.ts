@@ -7,7 +7,7 @@
  * @param quality - JPEG quality 0-1 (default 0.7)
  * @returns Promise resolving to a new reduced File object
  */
-export const compressImage = (file: File, maxWidth = 1280, quality = 0.7): Promise<File> => {
+export const compressImage = (file: File, maxWidth = 800, quality = 0.5): Promise<File> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
