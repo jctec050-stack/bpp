@@ -53,7 +53,8 @@ const MainApp: React.FC = () => {
         try {
             console.log('📡 Fetching data...');
             // Load Venues
-            const fetchedVenues = await getVenues();
+            // If OWNER, fetch only their venues. If PLAYER, fetch all.
+            const fetchedVenues = await getVenues(user.role === 'OWNER' ? user.id : undefined);
             setVenues(fetchedVenues);
 
             // Load Bookings (optimize: filter by date or venue later)

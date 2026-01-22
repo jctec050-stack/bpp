@@ -32,13 +32,20 @@ export const uploadCourtImage = async (file: File, courtId: string): Promise<str
 
 
 // Venues & Courts
-export const getVenues = async (): Promise<Venue[]> => {
-    const { data: venues, error } = await supabase
+export const getVenues = async (ownerId?: string): Promise<Venue[]> => {
+    let query = supabase
         .from('venues')
         .select(`
       *,
       courts (*)
     `);
+
+    // Filter by owner if provided
+    if (ownerId) {
+        query = query.eq('owner_id', ownerId);
+    }
+
+    const { data: venues, error } = await query;
 
     if (error) {
         console.error('Error fetching venues:', error);
