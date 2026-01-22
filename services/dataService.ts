@@ -6,58 +6,26 @@ export const uploadCourtImage = async (file: File, courtId: string): Promise<str
     try {
         const fileExt = file.name.split('.').pop();
         const fileName = `${courtId}-${Date.now()}.${fileExt}`;
-        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
 
-        console.log(`⏳ Starting upload to "court-images" bucket... File size: ${fileSizeMB} MB`);
-
-        // Check if bucket exists first
-        console.log('🔍 Checking if "court-images" bucket exists...');
-        const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
-
-        if (bucketError) {
-            console.error('❌ Error listing buckets:', bucketError);
-            return null;
-        }
-
-        const courtImagesBucket = buckets?.find(b => b.name === 'court-images');
-        if (!courtImagesBucket) {
-            console.error('❌ CRITICAL: "court-images" bucket does NOT exist!');
-            console.log('Available buckets:', buckets?.map(b => b.name));
-            alert('Error: El bucket "court-images" no existe en Supabase. Por favor contacta al administrador.');
-            return null;
-        }
-
-        console.log('✅ Bucket exists, proceeding with upload...');
-
-        // Create upload promise
-        const uploadPromise = supabase.storage
+        const { data, error } = await supabase.storage
             .from('court-images')
             .upload(fileName, file, {
                 cacheControl: '3600',
                 upsert: false
             });
 
-        // Create timeout promise (30 seconds)
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout: Image upload took too long (>30s). File size: ${fileSizeMB} MB. Check internet or bucket.`)), 30000)
-        );
-
-        // Race them
-        const { data, error } = await Promise.race([uploadPromise, timeoutPromise]) as any;
-
         if (error) {
-            console.error('❌ Error uploading image:', error);
+            console.error('Error uploading image:', error);
             return null;
         }
 
-        console.log('✅ Upload successful!');
         const { data: { publicUrl } } = supabase.storage
             .from('court-images')
             .getPublicUrl(fileName);
 
         return publicUrl;
     } catch (error) {
-        console.error('❌ Exception uploading image:', error);
+        console.error('Exception uploading image:', error);
         return null;
     }
 };
@@ -170,9 +138,23 @@ const checkSystemHealth = async () => {
         }
     } catch (e) { console.error('Error checking config', e); }
 
-    // Skip auth check - it's causing timeouts with large images and user is already authenticated
-    console.log('⏭️ Skipping Auth check (user already authenticated)');
-    results.auth = true;
+    // 1. Check Auth (with timeout)
+    console.log('🔐 Verifying Auth Session...');
+    try {
+        const authPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject('Auth Timeout'), 5000));
+
+        const { data: { session } } = await Promise.race([authPromise, timeoutPromise]) as any;
+
+        if (session) {
+            console.log('✅ Auth: User is logged in:', session.user.id);
+            results.auth = true;
+        } else {
+            console.error('❌ Auth: No active session found (User might be logged out)');
+        }
+    } catch (e) {
+        console.error('❌ Auth: Check FAILED or TIMED OUT:', e);
+    }
 
     // 2. Check DB Read
     try {
@@ -215,8 +197,30 @@ export const createVenueWithCourts = async (
     venue: Omit<Venue, 'id' | 'courts'>,
     courts: Omit<Court, 'id'>[]
 ): Promise<boolean> => {
-    // Store image as base64 directly (no upload to storage)
-    const imageUrl = venue.imageUrl || '';
+    // Run Pre-flight Check
+    const health = await checkSystemHealth();
+    if (!health.db) {
+        console.error('Error de conexión con la Base de Datos. Revisa tu internet o la configuración de Supabase.');
+        return false;
+    }
+
+    let imageUrl = venue.imageUrl;
+
+    // Handle Image Upload if it's base64
+    if (imageUrl && imageUrl.startsWith('data:image')) {
+        console.log('📤 Uploading image to storage (Optimistic check)...');
+
+        // Try uploading even if health.storage is false (Bucket might exist but be hidden from list)
+        const uploadedUrl = await uploadVenueImage(imageUrl, venue.ownerId);
+
+        if (uploadedUrl) {
+            console.log('✅ Image uploaded successfully:', uploadedUrl);
+            imageUrl = uploadedUrl;
+        } else {
+            console.warn('⚠️ Image upload failed, saving without image');
+            imageUrl = '';
+        }
+    }
 
     // Geocode address to get coordinates
     let latitude: number | null = null;
@@ -258,9 +262,9 @@ export const createVenueWithCourts = async (
             .select()
             .single();
 
-        // Create timeout promise (30 seconds)
+        // Create timeout promise (10 seconds)
         const dbTimeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout: Database insert took too long. Likely RLS or Network issue.')), 30000)
+            setTimeout(() => reject(new Error('Timeout: Database insert took too long. Likely RLS or Network issue.')), 10000)
         );
 
         // Race them
@@ -443,22 +447,15 @@ export const deleteBooking = async (bookingId: string): Promise<boolean> => {
     }
 };
 
-export const getBookings = async (ownerId?: string): Promise<Booking[]> => {
-    let query = supabase
+export const getBookings = async (): Promise<Booking[]> => {
+    const { data: bookings, error } = await supabase
         .from('bookings')
         .select(`
       *,
-      venue:venues!inner(name, owner_id),
+      venue:venues(name),
       court:courts(name, type),
       player:profiles(full_name)
     `);
-
-    // Filter by owner if provided
-    if (ownerId) {
-        query = query.eq('venue.owner_id', ownerId);
-    }
-
-    const { data: bookings, error } = await query;
 
     if (error) {
         console.error('Error fetching bookings:', error);
