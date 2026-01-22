@@ -64,6 +64,11 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
     const [price, setPrice] = useState(0);
     const [error, setError] = useState('');
 
+    // New court image state
+    const [courtImageFile, setCourtImageFile] = useState<File | null>(null);
+    const [courtImagePreview, setCourtImagePreview] = useState<string>('');
+    const [isUploadingCourt, setIsUploadingCourt] = useState(false);
+
     const formatNumber = (num: number) => {
         return new Intl.NumberFormat('es-PY').format(num);
     };
@@ -73,7 +78,7 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
         setPrice(Number(rawValue));
     };
 
-    const handleAddCourtToList = () => {
+    const handleAddCourtToList = async () => {
         if (!courtName.trim()) {
             setError('Ingresa un nombre para la cancha');
             return;
@@ -83,11 +88,28 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
             return;
         }
 
+        setIsUploadingCourt(true);
+        let uploadedImageUrl = '';
+
+        if (courtImageFile) {
+            // Use a temporary ID for the filename
+            const tempId = `new-${Date.now()}`;
+            const publicUrl = await uploadCourtImage(courtImageFile, tempId);
+            if (publicUrl) {
+                uploadedImageUrl = publicUrl;
+            } else {
+                setError('Error al subir la imagen. Intenta de nuevo.');
+                setIsUploadingCourt(false);
+                return;
+            }
+        }
+
         const newCourt: Omit<Court, 'id'> = {
             name: courtName.trim(),
             type: courtType,
             pricePerHour: price,
-            address: venueAddress // Inherit venue address by default
+            address: venueAddress,
+            imageUrl: uploadedImageUrl
         };
 
         setPendingCourts([...pendingCourts, newCourt]);
@@ -95,7 +117,10 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
         // Reset form
         setCourtName('');
         setPrice(0);
+        setCourtImageFile(null);
+        setCourtImagePreview('');
         setError('');
+        setIsUploadingCourt(false);
     };
 
     const removePendingCourt = (index: number) => {
