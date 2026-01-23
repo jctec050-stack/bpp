@@ -14,17 +14,52 @@ export const uploadImage = async (
         console.log(`📤 Uploading image to ${bucket}/${path}`);
         console.log(`ℹ️ File details: type=${file.type}, size=${file.size} bytes`);
 
-        // DIAGNOSTIC: Test connectivity
+        // DIAGNOSTIC 1: Test connectivity (SDK) with timeout
+        console.log('🕵️ Diagnostic 1: Testing bucket access (SDK)...');
         try {
-            console.log('🕵️ Diagnostic: Testing bucket access...');
-            const { data: listData, error: listError } = await supabase.storage.from(bucket).list('', { limit: 1 });
-            if (listError) {
-                console.error('❌ Diagnostic: List failed', listError);
+            const listPromise = supabase.storage.from(bucket).list('', { limit: 1 });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('SDK List timeout')), 5000));
+            const result: any = await Promise.race([listPromise, timeoutPromise]);
+
+            if (result.error) {
+                console.error('❌ Diagnostic 1: SDK List failed', result.error);
             } else {
-                console.log('✅ Diagnostic: Bucket reachable. Content count:', listData?.length);
+                console.log('✅ Diagnostic 1: SDK Bucket reachable. Content count:', result.data?.length);
             }
         } catch (diagErr) {
-            console.error('❌ Diagnostic: Exception listing bucket', diagErr);
+            console.error('❌ Diagnostic 1: Exception/Timeout listing bucket', diagErr);
+        }
+
+        // DIAGNOSTIC 2: Direct HTTP Fetch
+        console.log('🕵️ Diagnostic 2: HTTP Fetch check...');
+        try {
+            // Access variables directly from process.env to ensure fresh values
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+            if (!supabaseUrl || !supabaseKey) {
+                console.error('❌ Diagnostic 2: Missing env vars');
+            } else {
+                // Use AbortController for fetch timeout
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), 5000);
+
+                const res = await fetch(`${supabaseUrl}/storage/v1/bucket/${bucket}`, {
+                    headers: {
+                        Authorization: `Bearer ${supabaseKey}`,
+                        ApiKey: supabaseKey || ''
+                    },
+                    signal: controller.signal
+                });
+                clearTimeout(id);
+
+                console.log(`✅ Diagnostic 2: Fetch status ${res.status} ${res.statusText}`);
+                if (!res.ok) {
+                    console.log('❌ Diagnostic 2 Response:', await res.text());
+                }
+            }
+        } catch (fetchErr) {
+            console.error('❌ Diagnostic 2: Fetch Exception', fetchErr);
         }
 
         // Create a timeout promise (15 seconds)
