@@ -45,7 +45,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, venue,
 
   // Pie Chart: Distribution for the selected date
   const sportDistribution = dailyActiveBookings.reduce((acc: any[], b) => {
-    const sport = b.courtName.includes('Beach') ? 'Beach Tennis' : 'Padel';
+    const sport = (b.court_name || '').includes('Beach') ? 'Beach Tennis' : 'Padel';
     const existing = acc.find(item => item.name === sport);
     if (existing) {
       existing.value += 1;
