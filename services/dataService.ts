@@ -277,7 +277,8 @@ export const addCourts = async (venueId: string, courts: Omit<Court, 'id'>[]): P
             venue_id: venueId,
             name: c.name,
             type: c.type,
-            price_per_hour: c.pricePerHour
+            price_per_hour: c.pricePerHour,
+            image_url: c.imageUrl || null
         }));
 
         const { error } = await supabase
