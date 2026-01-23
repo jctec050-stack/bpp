@@ -251,7 +251,8 @@ export const createVenueWithCourts = async (
                 venue_id: venueData.id,
                 name: c.name,
                 type: c.type,
-                price_per_hour: c.pricePerHour
+                price_per_hour: c.pricePerHour,
+                image_url: c.imageUrl || null
             }));
 
             const { error: courtsError } = await supabase
