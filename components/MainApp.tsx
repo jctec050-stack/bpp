@@ -206,13 +206,15 @@ const MainApp: React.FC = () => {
 
         for (const slot of selectedSlots) {
             const success = await createBooking({
-                venueId: venues[0].id, // Limit to current venue context
-                courtId: slot.courtId,
+                venue_id: venues[0].id,
+                court_id: slot.courtId,
+                player_id: user.id,
                 date: selectedDate,
-                startTime: slot.time,
-                endTime: slot.time,
+                start_time: slot.time,
+                end_time: `${(parseInt(slot.time.split(':')[0]) + 1).toString().padStart(2, '0')}:00`,
                 price: slot.price,
-                status: 'ACTIVE'
+                status: 'ACTIVE',
+                payment_status: 'PENDING' // Default payment status
             });
             if (success) successCount++;
             else failCount++;
@@ -482,7 +484,7 @@ const MainApp: React.FC = () => {
         );
     }
 
-    const userNotifications = notifications.filter(n => n.userId === user.role);
+    const userNotifications = notifications.filter(n => n.user_id === user.role);
 
     return (
         <div className="min-h-screen bg-gray-50 pb-12">
@@ -508,7 +510,7 @@ const MainApp: React.FC = () => {
                             <NotificationCenter
                                 notifications={userNotifications}
                                 onClose={() => setShowNotifications(false)}
-                                onClear={() => setNotifications(prev => prev.filter(n => n.userId !== user.role))}
+                                onClear={() => setNotifications(prev => prev.filter(n => n.user_id !== user.role))}
                             />
                         )}
                     </div>
@@ -642,12 +644,12 @@ const MainApp: React.FC = () => {
                         <div className="mt-12">
                             <h3 className="text-xl font-bold text-gray-900 mb-6">Mis Reservas ({selectedDate})</h3>
                             <div className="space-y-4">
-                                {bookings.filter(b => b.date === selectedDate && b.playerId === user?.id).length === 0 ? (
+                                {bookings.filter(b => b.date === selectedDate && b.player_id === user?.id).length === 0 ? (
                                     <div className="bg-white p-12 rounded-2xl border border-dashed border-gray-300 text-center text-gray-400">
                                         No hay reservas para esta fecha
                                     </div>
                                 ) : (
-                                    getGroupedBookings(bookings.filter(b => b.date === selectedDate && b.playerId === user?.id)).map(group => (
+                                    getGroupedBookings(bookings.filter(b => b.date === selectedDate && b.player_id === user?.id)).map(group => (
                                         <div key={group.id[0]} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
@@ -826,33 +828,33 @@ const MainApp: React.FC = () => {
 
                                                     <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                                                         <h4 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                                                            {court.imageUrl && (
+                                                            {court.image_url && (
                                                                 <div className="w-12 h-12 rounded-lg overflow-hidden border border-gray-200">
-                                                                    <img src={court.imageUrl} alt={court.name} className="w-full h-full object-cover" />
+                                                                    <img src={court.image_url} alt={court.name} className="w-full h-full object-cover" />
                                                                 </div>
                                                             )}
                                                             {court.name}
                                                             <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded ml-2">{court.type}</span>
                                                         </h4>
                                                         <span className="text-indigo-600 font-bold bg-indigo-50 px-4 py-2 rounded-xl">
-                                                            Gs. {court.pricePerHour.toLocaleString('es-PY')}/h
+                                                            Gs. {court.price_per_hour.toLocaleString('es-PY')}/h
                                                         </span>
                                                     </div>
 
                                                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
                                                         {TIME_SLOTS.map(slot => {
                                                             const isBooked = bookings.some(b =>
-                                                                b.venueId === selectedVenue.id &&
-                                                                b.courtId === court.id &&
+                                                                b.venue_id === selectedVenue.id &&
+                                                                b.court_id === court.id &&
                                                                 b.date === selectedDate &&
-                                                                b.startTime === slot &&
+                                                                b.start_time === slot &&
                                                                 b.status === 'ACTIVE'
                                                             );
 
                                                             const isDisabled = disabledSlots.some(s =>
-                                                                s.venueId === selectedVenue.id &&
-                                                                s.courtId === court.id &&
-                                                                s.timeSlot === slot
+                                                                s.venue_id === selectedVenue.id &&
+                                                                s.court_id === court.id &&
+                                                                s.time_slot === slot
                                                             );
 
                                                             const isUnavailable = isBooked || isDisabled;
