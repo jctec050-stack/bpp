@@ -12,17 +12,40 @@ export const uploadImage = async (
 ): Promise<string | null> => {
     try {
         console.log(`📤 Uploading image to ${bucket}/${path}`);
+        console.log(`ℹ️ File details: type=${file.type}, size=${file.size} bytes`);
 
-        // Upload file
-        const { data, error } = await supabase.storage
+        // DIAGNOSTIC: Test connectivity
+        try {
+            console.log('🕵️ Diagnostic: Testing bucket access...');
+            const { data: listData, error: listError } = await supabase.storage.from(bucket).list('', { limit: 1 });
+            if (listError) {
+                console.error('❌ Diagnostic: List failed', listError);
+            } else {
+                console.log('✅ Diagnostic: Bucket reachable. Content count:', listData?.length);
+            }
+        } catch (diagErr) {
+            console.error('❌ Diagnostic: Exception listing bucket', diagErr);
+        }
+
+        // Create a timeout promise (15 seconds)
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Upload request timed out (15s)')), 15000)
+        );
+
+        // Upload file with race against timeout
+        const uploadPromise = supabase.storage
             .from(bucket)
             .upload(path, file, {
                 cacheControl: '3600',
-                upsert: true
+                upsert: false // Changed to false to avoid potential locking issues
             });
 
+        const result: any = await Promise.race([uploadPromise, timeoutPromise]);
+
+        const { data, error } = result;
+
         if (error) {
-            console.error('❌ Upload error:', error);
+            console.error('❌ Upload error details:', error);
             return null;
         }
 
@@ -35,7 +58,7 @@ export const uploadImage = async (
         return publicUrl;
     } catch (error) {
         console.error('❌ Exception uploading image:', error);
-        return null;
+        return null; // Return null handled gracefully by UI
     }
 };
 
