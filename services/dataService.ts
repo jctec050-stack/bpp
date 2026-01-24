@@ -24,7 +24,7 @@ export const uploadImage = async (
             .from(bucket)
             .upload(path, file, {
                 cacheControl: '3600',
-                upsert: false // Changed to false to avoid potential locking issues
+                upsert: false
             });
 
         const result: any = await Promise.race([uploadPromise, timeoutPromise]);
@@ -45,7 +45,7 @@ export const uploadImage = async (
         return publicUrl;
     } catch (error) {
         console.error('❌ Exception uploading image:', error);
-        return null; // Return null handled gracefully by UI
+        return null;
     }
 };
 
@@ -98,46 +98,65 @@ export const getOwnerVenues = async (ownerId: string): Promise<Venue[]> => {
     }
 };
 
-export const createVenue = async (venue: Omit<Venue, 'id' | 'courts'>): Promise<Venue | null> => {
+export const createVenue = async (venueData: Omit<Venue, 'id' | 'courts'>): Promise<Venue | null> => {
     try {
-        // Geocoding logic would go here if needed server-side
-        // But we handle it in frontend
+        console.log('🏟️ Creating Venue with data:', venueData);
+
+        // Explicitly map fields to ensure exact DB matching
+        const payload = {
+            owner_id: venueData.owner_id,
+            name: venueData.name,
+            address: venueData.address,
+            image_url: venueData.image_url,
+            opening_hours: venueData.opening_hours,
+            amenities: venueData.amenities,
+            contact_info: venueData.contact_info,
+            latitude: venueData.latitude,   // Optional
+            longitude: venueData.longitude, // Optional
+            is_active: true
+        };
 
         const { data, error } = await supabase
             .from('venues')
-            .insert(venue)
+            .insert(payload)
             .select()
             .single();
 
         if (error) {
-            console.error('❌ Error creating venue:', error);
-            // Log RLS error details if present
+            console.error('❌ Error creating venue (DB Insert):', error);
             if (error.code === '42501') {
-                console.error('🚫 Permission Denied (RLS): Ensure User is OWNER and Policies match.');
+                console.error('🚫 Permission Denied (RLS). Please run scripts 13 or 14.');
             }
             throw error;
         }
 
+        console.log('✅ Venue created via API:', data);
         return venueFromDB(data);
     } catch (error) {
-        console.error('❌ Error creating venue:', error);
-        // Do not swallow error, rethrow to handle in UI
+        console.error('❌ Exception in createVenue:', error);
         throw error;
     }
 };
 
+// Interface extension for Court with temporary File
+type CourtInput = Omit<Court, 'id'> & { imageFile?: File };
+
 export const createVenueWithCourts = async (
     venueData: Omit<Venue, 'id' | 'courts'>,
-    newCourts: Omit<Court, 'id'>[]
+    newCourts: CourtInput[]
 ): Promise<boolean> => {
     try {
         // 1. Create Venue
         const createdVenue = await createVenue(venueData);
 
-        if (!createdVenue) return false;
+        if (!createdVenue) {
+            console.error('❌ createVenue failed, returned null');
+            return false;
+        }
 
         // 2. Add Courts if any
         if (newCourts.length > 0) {
+            console.log(`Adding ${newCourts.length} courts to venue ${createdVenue.id}`);
             await addCourts(createdVenue.id, newCourts);
         }
 
@@ -182,35 +201,55 @@ export const deleteVenue = async (id: string): Promise<boolean> => {
 // COURTS
 // ============================================
 
-export const addCourts = async (venueId: string, courts: Omit<Court, 'id'>[]) => {
+export const addCourts = async (venueId: string, courts: CourtInput[]) => {
     try {
-        const courtsToInsert = await Promise.all(courts.map(async (court) => {
-            let image_url = court.image_url;
-            const imageFile = (court as any).imageFile; // Access temporary file property if exists
+        // Process sequentially to avoid race conditions with uploads
+        // Map to Promise.all but we treat each court carefully
+        const courtsToInsert = await Promise.all(courts.map(async (court, index) => {
+            console.log(`Processing court ${index + 1}/${courts.length}: ${court.name}`);
+
+            let finalImageUrl = court.image_url || '';
+            const imageFile = court.imageFile;
 
             // Upload image if provided
             if (imageFile) {
+                console.log(`📸 Uploading image for court ${court.name}...`);
                 const cleanFileName = imageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const path = `courts/${venueId}/${Date.now()}_${cleanFileName}`;
-                const uploadedUrl = await uploadImage(imageFile, 'venue-images', path); // Use venue-images as fallback
-                image_url = uploadedUrl || '';
+
+                // Use 'venue-images' as it is the stable bucket
+                const uploadedUrl = await uploadImage(imageFile, 'venue-images', path);
+
+                if (uploadedUrl) {
+                    finalImageUrl = uploadedUrl;
+                    console.log(`✅ Image uploaded for court ${court.name}: ${finalImageUrl}`);
+                } else {
+                    console.warn(`⚠️ Image upload failed for court ${court.name}, saving without image.`);
+                }
             }
 
+            // Explicit DB Payload
             return {
                 venue_id: venueId,
                 name: court.name,
                 type: court.type,
                 price_per_hour: court.price_per_hour,
                 is_active: court.is_active ?? true,
-                image_url: image_url
+                image_url: finalImageUrl
             };
         }));
+
+        console.log('💾 Inserting courts into DB:', courtsToInsert);
 
         const { error } = await supabase
             .from('courts')
             .insert(courtsToInsert);
 
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Error inserting courts:', error);
+            throw error;
+        }
+        console.log('✅ Courts inserted successfully');
     } catch (error) {
         console.error('❌ Error adding courts:', error);
         throw error;
@@ -248,7 +287,17 @@ export const deleteCourt = async (courtId: string): Promise<boolean> => {
 };
 
 // ============================================
-// BOOKINGS
+// UPLOAD COURT IMAGE WRAPPER
+// ============================================
+export const uploadCourtImage = async (file: File, courtId: string): Promise<string | null> => {
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const path = `courts/${courtId}_${Date.now()}_${cleanFileName}`;
+    // Use 'venue-images' because it is confirmed to work
+    return await uploadImage(file, 'venue-images', path);
+};
+
+// ============================================
+// BOOKINGS, SLOTS, ETC (Standard)
 // ============================================
 
 export const getVenueBookings = async (venueId: string, date: string): Promise<Booking[]> => {
@@ -318,10 +367,6 @@ export const deleteBooking = async (id: string): Promise<boolean> => {
 };
 
 
-// ============================================
-// DISABLED SLOTS
-// ============================================
-
 export const getDisabledSlots = async (venueId: string, date: string): Promise<DisabledSlot[]> => {
     try {
         const { data, error } = await supabase
@@ -369,9 +414,6 @@ export const deleteDisabledSlot = async (id: string): Promise<boolean> => {
     }
 };
 
-// ============================================
-// PROFILE
-// ============================================
 export const getUserProfile = async (userId: string): Promise<Profile | null> => {
     try {
         const { data, error } = await supabase
@@ -381,7 +423,6 @@ export const getUserProfile = async (userId: string): Promise<Profile | null> =>
             .single();
 
         if (error) {
-            // If error is row not found, return null (it might be created later via trigger)
             if (error.code === 'PGRST116') return null;
             throw error;
         }
@@ -405,14 +446,4 @@ export const updateUserProfile = async (userId: string, updates: Partial<Profile
         console.error('❌ Error updating profile:', error);
         return false;
     }
-};
-
-// ============================================
-// UPLOAD COURT IMAGE WRAPPER
-// ============================================
-export const uploadCourtImage = async (file: File, courtId: string): Promise<string | null> => {
-    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const path = `courts/${courtId}_${Date.now()}_${cleanFileName}`;
-    // Use 'venue-images' because it is confirmed to work
-    return await uploadImage(file, 'venue-images', path);
 };
