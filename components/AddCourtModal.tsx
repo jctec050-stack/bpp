@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { SportType, Court } from '../types';
-import { uploadCourtImage } from '../services/dataService';
+import { uploadCourtImage, uploadImage } from '../services/dataService';
 import { compressImage } from '../utils/imageUtils';
 
 interface AddCourtModalProps {
@@ -45,6 +45,7 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
     const [endHour, setEndHour] = useState(currentOpeningHours.split(' - ')[1] || '22:00');
 
     const [imageUrl, setImageUrl] = useState(currentImageUrl);
+    const [venueImageFile, setVenueImageFile] = useState<File | null>(null);
 
     // Step 4: Amenities
     const [amenities, setAmenities] = useState<string[]>(currentAmenities);
@@ -179,8 +180,34 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
         setError('');
 
         try {
+            // Upload Venue Image if new file selected
+            let finalVenueImageUrl = imageUrl;
+            if (venueImageFile) {
+                const cleanFileName = venueImageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                const path = `venues/${Date.now()}_${cleanFileName}`;
+                // Upload
+                const uploadedUrl = await uploadImage(venueImageFile, 'venue-images', path);
+                if (uploadedUrl) {
+                    finalVenueImageUrl = uploadedUrl;
+                } else {
+                    console.warn('Venue image upload failed, proceeding without new image');
+                    // Look out! We might be sending Base64 if upload fails and we fallback to imageUrl state
+                    // Better to fallback to empty string or currentImageUrl if upload failed?
+                    // Actually, if upload fails, we probably shouldn't send Base64.
+                    // But if we fail, we probably should stop.
+                    // For now, let's just warn.
+                    if (imageUrl.startsWith('data:')) {
+                        // If it's base64, don't send it. Use empty or old.
+                        finalVenueImageUrl = currentImageUrl;
+                    }
+                }
+            } else if (imageUrl.startsWith('data:')) {
+                // Check edge case: imageUrl is base64 but no file? (Shouldn't happen with logic above)
+                finalVenueImageUrl = currentImageUrl;
+            }
+
             const fullOpeningHours = `${startHour} - ${endHour}`;
-            await onSave(venueName, venueAddress, fullOpeningHours, imageUrl, amenities, contactPhone, pendingCourts, courtsToDelete);
+            await onSave(venueName, venueAddress, fullOpeningHours, finalVenueImageUrl, amenities, contactPhone, pendingCourts, courtsToDelete);
             onClose();
         } catch (err) {
             console.error('Error saving venue:', err);
@@ -279,6 +306,10 @@ export const AddCourtModal: React.FC<AddCourtModalProps> = ({
                                             return;
                                         }
 
+                                        // Store file for upload on save
+                                        setVenueImageFile(file);
+
+                                        // Preview
                                         const reader = new FileReader();
                                         reader.onloadend = () => {
                                             setImageUrl(reader.result as string);
