@@ -53,7 +53,12 @@ export const uploadImage = async (
 // VENUES
 // ============================================
 
-export const getVenues = async (): Promise<Venue[]> => {
+export const getVenues = async (ownerId?: string): Promise<Venue[]> => {
+    // Compatibility: If ownerId is provided, delegate to getOwnerVenues
+    if (ownerId) {
+        return getOwnerVenues(ownerId);
+    }
+
     try {
         const { data, error } = await supabase
             .from('venues')
@@ -203,8 +208,6 @@ export const deleteVenue = async (id: string): Promise<boolean> => {
 
 export const addCourts = async (venueId: string, courts: CourtInput[]) => {
     try {
-        // Process sequentially to avoid race conditions with uploads
-        // Map to Promise.all but we treat each court carefully
         const courtsToInsert = await Promise.all(courts.map(async (court, index) => {
             console.log(`Processing court ${index + 1}/${courts.length}: ${court.name}`);
 
@@ -217,7 +220,6 @@ export const addCourts = async (venueId: string, courts: CourtInput[]) => {
                 const cleanFileName = imageFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
                 const path = `courts/${venueId}/${Date.now()}_${cleanFileName}`;
 
-                // Use 'venue-images' as it is the stable bucket
                 const uploadedUrl = await uploadImage(imageFile, 'venue-images', path);
 
                 if (uploadedUrl) {
@@ -292,13 +294,35 @@ export const deleteCourt = async (courtId: string): Promise<boolean> => {
 export const uploadCourtImage = async (file: File, courtId: string): Promise<string | null> => {
     const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const path = `courts/${courtId}_${Date.now()}_${cleanFileName}`;
-    // Use 'venue-images' because it is confirmed to work
     return await uploadImage(file, 'venue-images', path);
 };
 
 // ============================================
-// BOOKINGS, SLOTS, ETC (Standard)
+// BOOKINGS
 // ============================================
+
+export const getBookings = async (): Promise<Booking[]> => {
+    try {
+        // RLS will automatically filter:
+        // Owners see all bookings for their venues
+        // Players see their own bookings
+        const { data, error } = await supabase
+            .from('bookings')
+            .select(`
+                *,
+                profiles:player_id (full_name, email, phone),
+                venues:venue_id (name),
+                courts:court_id (name, type)
+            `)
+            .order('date', { ascending: false });
+
+        if (error) throw error;
+        return (data || []).map(bookingFromDB);
+    } catch (error) {
+        console.error('❌ Error fetching all bookings:', error);
+        return [];
+    }
+};
 
 export const getVenueBookings = async (venueId: string, date: string): Promise<Booking[]> => {
     try {
@@ -351,6 +375,11 @@ export const updateBookingStatus = async (id: string, status: 'CONFIRMED' | 'CAN
     }
 };
 
+// Alias for MainApp compatibility
+export const cancelBooking = async (id: string): Promise<boolean> => {
+    return updateBookingStatus(id, 'CANCELLED');
+};
+
 export const deleteBooking = async (id: string): Promise<boolean> => {
     try {
         const { error } = await supabase
@@ -366,6 +395,10 @@ export const deleteBooking = async (id: string): Promise<boolean> => {
     }
 };
 
+
+// ============================================
+// DISABLED SLOTS
+// ============================================
 
 export const getDisabledSlots = async (venueId: string, date: string): Promise<DisabledSlot[]> => {
     try {
@@ -414,6 +447,51 @@ export const deleteDisabledSlot = async (id: string): Promise<boolean> => {
     }
 };
 
+export const toggleSlotAvailability = async (
+    venueId: string,
+    courtId: string,
+    date: string,
+    time: string,
+    userId: string // Need user ID for 'created_by'
+): Promise<boolean> => {
+    try {
+        // Check if slot exists
+        const { data, error } = await supabase
+            .from('disabled_slots')
+            .select('id')
+            .eq('venue_id', venueId)
+            .eq('court_id', courtId)
+            .eq('date', date)
+            .eq('time_slot', time)
+            .single();
+
+        if (data) {
+            // Exists -> Delete (Enable)
+            console.log(`✅ Slot occupied (${data.id}). Re-enabling...`);
+            return await deleteDisabledSlot(data.id);
+        } else {
+            // Not exists -> Create (Disable)
+            console.log(`🚫 Slot free. Disabling...`);
+            await createDisabledSlot({
+                venue_id: venueId,
+                court_id: courtId,
+                date: date,
+                time_slot: time,
+                created_by: userId,
+                reason: 'Manual lock',
+                created_at: new Date().toISOString() // Should be handled by DB default but included for type safety
+            });
+            return true;
+        }
+    } catch (error) {
+        console.error('❌ Error toggling slot:', error);
+        return false;
+    }
+};
+
+// ============================================
+// PROFILE
+// ============================================
 export const getUserProfile = async (userId: string): Promise<Profile | null> => {
     try {
         const { data, error } = await supabase
@@ -423,6 +501,7 @@ export const getUserProfile = async (userId: string): Promise<Profile | null> =>
             .single();
 
         if (error) {
+            // If error is row not found, return null (it might be created later via trigger)
             if (error.code === 'PGRST116') return null;
             throw error;
         }
