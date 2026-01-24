@@ -121,7 +121,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, venue,
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <h5 className="text-lg font-bold text-gray-800 mb-6">Ingresos (Últimos 7 días hasta {selectedDate})</h5>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="99%" height="100%">
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" fontSize={10} tickFormatter={(val) => val.split('-')[2] + '/' + val.split('-')[1]} />
@@ -138,7 +138,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, venue,
           <div className="h-64 flex flex-col items-center">
             {sportDistribution.length > 0 ? (
               <>
-                <ResponsiveContainer width="100%" height={256}>
+                <ResponsiveContainer width="99%" height={256}>
                   <PieChart>
                     <Pie data={sportDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                       {sportDistribution.map((entry: any, index: number) => (

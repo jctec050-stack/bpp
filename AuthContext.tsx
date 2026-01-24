@@ -205,12 +205,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
             const { error } = await supabase.auth.signOut();
             if (error) {
-                console.error('❌ Logout error (background):', error);
+                // Ignore session missing error as we are logging out anyway
+                if (error.message?.includes('session missing') || error.status === 403) {
+                    console.log('ℹ️ Session already expired or missing during logout.');
+                } else {
+                    console.warn('⚠️ Logout warning:', error.message);
+                }
             } else {
                 console.log('✅ Logout successful');
             }
         } catch (error) {
-            console.error('❌ Exception during logout (background):', error);
+            console.warn('⚠️ Exception during logout (background):', error);
         }
     };
 
