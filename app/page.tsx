@@ -191,7 +191,7 @@ export default function HomePage() {
     if (!user) return null; // Will redirect
 
     return (
-        <main className="max-w-7xl mx-auto px-4 py-8">
+        <main className="max-w-7xl mx-auto px-4 py-8 pb-32">
             {!selectedVenue ? (
                 // View 1: Venue List
                 <div>
