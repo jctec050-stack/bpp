@@ -70,7 +70,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, disabl
   // Memoize Schedule Items
   const scheduleItems = useMemo(() => {
     return [
-      ...dailyActiveBookings.map(b => ({
+      ...dailyBookings.map(b => ({
         id: b.id,
         time: b.start_time,
         courtName: b.court_name || 'Cancha',
@@ -92,7 +92,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, disabl
         };
       })
     ].sort((a, b) => a.time.localeCompare(b.time));
-  }, [dailyActiveBookings, disabledSlots, venue.courts]);
+  }, [dailyBookings, disabledSlots, venue.courts]);
 
   return (
     <div className="space-y-6">
@@ -224,17 +224,20 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, disabl
             <tbody className="divide-y divide-gray-100">
               {scheduleItems.length > 0 ? (
                 scheduleItems.map((item, index) => (
-                  <tr key={`${item.id}-${index}`} className="hover:bg-gray-50 transition">
+                  <tr key={`${item.id}-${index}`} className={`hover:bg-gray-50 transition ${item.status === 'CANCELLED' ? 'bg-red-50/50' : ''}`}>
                     <td className="px-6 py-4 font-bold text-gray-900">{item.time}</td>
                     <td className="px-6 py-4 text-gray-600">{item.courtName}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                        item.status === 'CANCELLED' ? 'bg-gray-200 text-gray-500 line-through' :
                         item.type === 'Reserva' ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'
                       }`}>
                         {item.type}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-700 font-medium">{item.details}</td>
+                    <td className={`px-6 py-4 font-medium ${item.status === 'CANCELLED' ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                        {item.details}
+                    </td>
                     <td className="px-6 py-4 text-right font-bold text-gray-900">
                       {item.price > 0 ? `Gs. ${item.price.toLocaleString('es-PY')}` : '-'}
                     </td>
@@ -242,7 +245,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, disabl
                       <span className={`inline-block w-2 h-2 rounded-full ${
                         item.status === 'ACTIVE' ? 'bg-green-500' :
                         item.status === 'COMPLETED' ? 'bg-blue-500' :
-                        item.status === 'DISABLED' ? 'bg-red-500' : 'bg-gray-300'
+                        item.status === 'CANCELLED' ? 'bg-red-500' :
+                        item.status === 'DISABLED' ? 'bg-orange-500' : 'bg-gray-300'
                       }`}></span>
                     </td>
                   </tr>
