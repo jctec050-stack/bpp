@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { User, UserRole } from './types';
 import { supabase } from '@/lib/supabase';
 
@@ -19,14 +19,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    const fetchingProfileRef = useRef<string | null>(null);
+
     const fetchProfile = async (userId: string, email: string, retryCount = 0) => {
+        // Prevent concurrent fetches for the same user (only for initial attempt)
+        if (retryCount === 0 && fetchingProfileRef.current === userId) {
+            console.log('🔄 Profile fetch already in progress for', userId);
+            return;
+        }
+
+        if (retryCount === 0) {
+            fetchingProfileRef.current = userId;
+        }
+
         try {
             console.log(`👤 Fetching profile for user: ${userId} (Attempt ${retryCount + 1})`);
-            const { data, error } = await supabase
+            
+            // Add timeout to prevent hanging indefinitely
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Profile fetch timed out')), 8000)
+            );
+
+            const fetchPromise = supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .maybeSingle();
+
+            // Cast to any because Promise.race type inference can be tricky with different return types
+            const result = await Promise.race([fetchPromise, timeoutPromise]) as any;
+            const { data, error } = result;
 
             if (error) {
                 console.error('❌ Error fetching profile:', error);
@@ -76,6 +98,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 return;
             }
             console.error('❌ Exception fetching profile:', e);
+        } finally {
+            // Clear the lock only if this is the root call
+            if (retryCount === 0) {
+                fetchingProfileRef.current = null;
+            }
         }
     };
 
