@@ -64,7 +64,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                     await fetchProfile(userId, email);
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
+            // Ignore AbortError (common when switching tabs or rapid navigation)
+            if (e.name === 'AbortError' || e.message?.includes('AbortError')) {
+                console.log('ℹ️ Fetch profile aborted');
+                return;
+            }
             console.error('❌ Exception fetching profile:', e);
         }
     };

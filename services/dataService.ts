@@ -91,7 +91,11 @@ export const getOwnerVenues = async (ownerId: string): Promise<Venue[]> => {
         if (error) throw error;
 
         return data as Venue[];
-    } catch (error) {
+    } catch (error: any) {
+        if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
+            console.log('ℹ️ Fetch owner venues aborted');
+            return [];
+        }
         console.error('❌ Error fetching owner venues:', error);
         return [];
     }
@@ -296,7 +300,10 @@ export const getBookings = async (ownerId?: string): Promise<Booking[]> => {
             court_name: (b.courts as any)?.name,
             court_type: (b.courts as any)?.type
         })) as Booking[];
-    } catch (error) {
+    } catch (error: any) {
+        if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
+            return [];
+        }
         console.error('❌ Error fetching all bookings:', error);
         return [];
     }
@@ -400,7 +407,10 @@ export const getDisabledSlots = async (venueId: string, date: string): Promise<D
             ...s,
             time_slot: s.time_slot?.substring(0, 5)
         })) as DisabledSlot[];
-    } catch (error) {
+    } catch (error: any) {
+        if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
+            return [];
+        }
         console.error('❌ Error fetching disabled slots:', error);
         return [];
     }
@@ -495,7 +505,10 @@ export const getUserProfile = async (userId: string): Promise<Profile | null> =>
             throw error;
         }
         return data as Profile;
-    } catch (error) {
+    } catch (error: any) {
+        if (error.name === 'AbortError' || error.message?.includes('AbortError')) {
+            return null;
+        }
         console.error('❌ Error fetching profile:', error);
         return null;
     }
