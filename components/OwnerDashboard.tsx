@@ -1,17 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Booking, Venue } from '../types';
+import { Booking, Venue, DisabledSlot } from '../types';
 
 
 interface OwnerDashboardProps {
   bookings: Booking[];
+  disabledSlots?: DisabledSlot[];
   venue: Venue;
   selectedDate: string;
   onDateChange: (date: string) => void;
 }
 
-export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, venue, selectedDate, onDateChange }) => {
+export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, disabledSlots, venue, selectedDate, onDateChange }) => {
   // Internal state removed, using props now
 
   // Filter bookings for the specific selected date
@@ -56,6 +57,31 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, venue,
   }, []);
 
   const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444'];
+
+  // Combine bookings and disabled slots for the schedule table
+  const scheduleItems = [
+    ...dailyActiveBookings.map(b => ({
+      id: b.id,
+      time: b.start_time,
+      courtName: b.court_name || 'Cancha',
+      type: 'Reserva',
+      status: b.status,
+      details: b.player_name || 'Cliente',
+      price: b.price
+    })),
+    ...(disabledSlots || []).map(s => {
+      const court = venue.courts.find(c => c.id === s.court_id);
+      return {
+        id: s.id,
+        time: s.time_slot,
+        courtName: court ? court.name : 'Cancha',
+        type: 'Bloqueo',
+        status: 'DISABLED',
+        details: s.reason || 'Mantenimiento',
+        price: 0
+      };
+    })
+  ].sort((a, b) => a.time.localeCompare(b.time));
 
   return (
     <div className="space-y-6">
@@ -167,6 +193,60 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, venue,
         </div>
       </div>
 
+      {/* Schedule Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="text-lg font-bold text-gray-800">Detalle de Actividad ({selectedDate})</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500 text-xs uppercase font-bold">
+                <th className="px-6 py-4">Hora</th>
+                <th className="px-6 py-4">Cancha</th>
+                <th className="px-6 py-4">Tipo</th>
+                <th className="px-6 py-4">Detalle / Cliente</th>
+                <th className="px-6 py-4 text-right">Monto</th>
+                <th className="px-6 py-4 text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {scheduleItems.length > 0 ? (
+                scheduleItems.map((item, index) => (
+                  <tr key={`${item.id}-${index}`} className="hover:bg-gray-50 transition">
+                    <td className="px-6 py-4 font-bold text-gray-900">{item.time}</td>
+                    <td className="px-6 py-4 text-gray-600">{item.courtName}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${
+                        item.type === 'Reserva' ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-600'
+                      }`}>
+                        {item.type}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-gray-700 font-medium">{item.details}</td>
+                    <td className="px-6 py-4 text-right font-bold text-gray-900">
+                      {item.price > 0 ? `Gs. ${item.price.toLocaleString('es-PY')}` : '-'}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-block w-2 h-2 rounded-full ${
+                        item.status === 'ACTIVE' ? 'bg-green-500' :
+                        item.status === 'COMPLETED' ? 'bg-blue-500' :
+                        item.status === 'DISABLED' ? 'bg-red-500' : 'bg-gray-300'
+                      }`}></span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
+                    No hay actividad registrada para este día
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
     </div>
   );

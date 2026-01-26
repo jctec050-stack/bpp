@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Venue, Booking } from '@/types';
-import { getVenues, getBookings } from '@/services/dataService';
+import { Venue, Booking, DisabledSlot } from '@/types';
+import { getVenues, getBookings, getDisabledSlots } from '@/services/dataService';
 import { OwnerDashboard } from '@/components/OwnerDashboard';
 
 export default function DashboardPage() {
@@ -12,6 +12,7 @@ export default function DashboardPage() {
     const router = useRouter();
     const [venues, setVenues] = useState<Venue[]>([]);
     const [bookings, setBookings] = useState<Booking[]>([]);
+    const [disabledSlots, setDisabledSlots] = useState<DisabledSlot[]>([]);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [loadingData, setLoadingData] = useState(true);
 
@@ -36,12 +37,17 @@ export default function DashboardPage() {
             // TODO: Optimize fetching by date range
             const fetchedBookings = await getBookings(user.id);
             setBookings(fetchedBookings);
+
+            if (fetchedVenues.length > 0) {
+                const fetchedDisabledSlots = await getDisabledSlots(fetchedVenues[0].id, selectedDate);
+                setDisabledSlots(fetchedDisabledSlots);
+            }
         } catch (error) {
             console.error('Error fetching dashboard data:', error);
         } finally {
             setLoadingData(false);
         }
-    }, [user]);
+    }, [user, selectedDate]);
 
     useEffect(() => {
         if (user?.role === 'OWNER') {
@@ -86,6 +92,7 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Dashboard</h1>
             <OwnerDashboard
                 bookings={bookings}
+                disabledSlots={disabledSlots}
                 venue={venues[0]} // Currently showing first venue, could add selector
                 selectedDate={selectedDate}
                 onDateChange={setSelectedDate}
