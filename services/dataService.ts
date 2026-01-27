@@ -673,3 +673,33 @@ export const updateSubscription = async (subId: string, updates: Partial<Subscri
         return false;
     }
 };
+
+export const createSubscription = async (subData: Partial<Subscription>): Promise<Subscription | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('subscriptions')
+            .insert(subData)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as Subscription;
+    } catch (error) {
+        console.error('❌ Error creating subscription:', error);
+        return null;
+    }
+};
+
+export const createPayment = async (paymentData: Partial<Payment>): Promise<boolean> => {
+    try {
+        const { error } = await supabase
+            .from('payments')
+            .insert(paymentData);
+
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('❌ Error creating payment:', error);
+        return false;
+    }
+};

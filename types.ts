@@ -2,7 +2,7 @@
 export type SportType = 'Padel' | 'Beach Tennis' | 'Tenis' | 'Futbol 5' | 'Futbol 7';
 export type UserRole = 'OWNER' | 'PLAYER' | 'ADMIN';
 export type BookingStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
-export type PaymentStatus = 'PENDING' | 'PAID' | 'REFUNDED';
+export type PaymentStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'QR';
 export type SubscriptionPlan = 'FREE' | 'BASIC' | 'PREMIUM' | 'ENTERPRISE';
 export type SubscriptionStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'SUSPENDED' | 'PENDING_PAYMENT';
@@ -151,7 +151,7 @@ export interface Payment {
   amount: number;
   currency: string;
   payment_method: PaymentMethod;
-  status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
+  status: PaymentStatus;
   transaction_id?: string;
   metadata?: Record<string, any>; // JSONB
   created_at: string;

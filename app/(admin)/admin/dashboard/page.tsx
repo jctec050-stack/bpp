@@ -3,8 +3,9 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
+import { Toaster, toast } from 'react-hot-toast';
 import { AdminVenueData, AdminProfileData, AdminSubscriptionData, AdminPaymentData, SubscriptionPlan, SubscriptionStatus } from '@/types';
-import { getAdminDashboardData, getAdminClientsData, getAdminSubscriptionsData, getAdminPaymentsData, updateSubscription, updateUserProfile } from '@/services/dataService';
+import { getAdminDashboardData, getAdminClientsData, getAdminSubscriptionsData, getAdminPaymentsData, updateSubscription, updateUserProfile, createPayment, createSubscription } from '@/services/dataService';
 
 const AdminDashboard = () => {
     const { user, isLoading: authLoading } = useAuth();
@@ -79,10 +80,33 @@ const AdminDashboard = () => {
         setIsEditSubModalOpen(true);
     };
 
+    const handleCreateSub = async (clientId: string) => {
+        const toastId = toast.loading('Creando suscripción...');
+        const newSub = await createSubscription({
+            owner_id: clientId,
+            plan_type: 'FREE',
+            price_per_month: 0,
+            status: 'ACTIVE',
+            start_date: new Date().toISOString().split('T')[0],
+            max_venues: 1,
+            max_courts_per_venue: 2
+        });
+
+        if (newSub) {
+             // Refresh data to show new sub
+             const [subs] = await Promise.all([getAdminSubscriptionsData()]);
+             setSubscriptionData(subs);
+             toast.success('Suscripción creada', { id: toastId });
+        } else {
+            toast.error('Error al crear suscripción', { id: toastId });
+        }
+    };
+
     const handleSaveSub = async () => {
         if (!editingSub) return;
         
         const currentSub = editingSub;
+        const toastId = toast.loading('Actualizando suscripción...');
 
         const success = await updateSubscription(currentSub.id, {
             plan_type: subForm.plan as SubscriptionPlan,
@@ -100,18 +124,40 @@ const AdminDashboard = () => {
             } : s));
             setIsEditSubModalOpen(false);
             setEditingSub(null);
+            toast.success('Suscripción actualizada', { id: toastId });
         } else {
-            alert('Error al actualizar la suscripción');
+            toast.error('Error al actualizar la suscripción', { id: toastId });
         }
     };
 
     const markAsPaid = async (sub: AdminSubscriptionData) => {
         if (!confirm(`¿Confirmar pago para ${sub.owner.full_name}? Se extenderá la suscripción por 30 días.`)) return;
 
+        const toastId = toast.loading('Procesando pago...');
+        
         const newEndDate = new Date();
         newEndDate.setDate(newEndDate.getDate() + 30);
         const endDateStr = newEndDate.toISOString().split('T')[0];
 
+        // 1. Create Payment Record
+        const paymentSuccess = await createPayment({
+            payment_type: 'SUBSCRIPTION',
+            subscription_id: sub.id,
+            payer_id: sub.owner_id,
+            amount: sub.price_per_month,
+            currency: 'PYG',
+            payment_method: 'CASH', // Default to CASH for manual admin entry, could be enhanced with a modal
+            status: 'COMPLETED',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        });
+
+        if (!paymentSuccess) {
+            toast.error('Error al registrar el pago', { id: toastId });
+            return;
+        }
+
+        // 2. Update Subscription
         const success = await updateSubscription(sub.id, {
             status: 'ACTIVE',
             end_date: endDateStr
@@ -123,8 +169,12 @@ const AdminDashboard = () => {
                 status: 'ACTIVE', 
                 end_date: endDateStr 
             } : s));
+            toast.success('Pago registrado y suscripción extendida', { id: toastId });
+            
+            // Refresh payments data to show new payment immediately
+            getAdminPaymentsData().then(setPaymentData);
         } else {
-            alert('Error al actualizar el pago');
+            toast.error('Error al actualizar la suscripción', { id: toastId });
         }
     };
 
@@ -140,6 +190,7 @@ const AdminDashboard = () => {
     };
 
     const handleSaveRuc = async (userId: string) => {
+        const toastId = toast.loading('Guardando RUC...');
         const success = await updateUserProfile(userId, { ruc: rucValue });
         if (success) {
             setClientData(prev => prev.map(c => c.id === userId ? { ...c, ruc: rucValue } : c));
@@ -147,8 +198,9 @@ const AdminDashboard = () => {
             setVenueData(prev => prev.map(v => v.owner_id === userId ? { ...v, owner: { ...v.owner, ruc: rucValue } } : v));
             setSubscriptionData(prev => prev.map(s => s.owner_id === userId ? { ...s, owner: { ...s.owner, ruc: rucValue } } : s));
             setEditingRuc(null);
+            toast.success('RUC actualizado correctamente', { id: toastId });
         } else {
-            alert('Error al guardar RUC');
+            toast.error('Error al guardar RUC', { id: toastId });
         }
     };
 
@@ -182,6 +234,7 @@ const AdminDashboard = () => {
 
     return (
         <div className="min-h-screen bg-gray-50 py-8 px-4 md:px-8">
+            <Toaster position="top-right" />
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
                     <div>
@@ -385,47 +438,69 @@ const AdminDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {subscriptionData.map((sub) => (
-                                    <tr key={sub.id} className="hover:bg-gray-50 transition">
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-900">{sub.owner?.full_name}</div>
-                                            <div className="text-xs text-gray-500">{sub.owner?.email}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`font-medium ${
-                                                sub.plan_type === 'PREMIUM' ? 'text-indigo-600' : 
-                                                sub.plan_type === 'ENTERPRISE' ? 'text-purple-600' : 'text-gray-600'
-                                            }`}>
-                                                {sub.plan_type}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {formatCurrency(sub.price_per_month)}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {sub.end_date ? new Date(sub.end_date).toLocaleDateString('es-PY') : '-'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                sub.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 
-                                                sub.status === 'EXPIRED' ? 'bg-red-100 text-red-800' :
-                                                'bg-gray-100 text-gray-800'
-                                            }`}>
-                                                {sub.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <button 
-                                                onClick={() => openEditSubModal(sub)}
-                                                className="text-indigo-600 hover:text-indigo-900 font-medium text-xs border border-indigo-200 px-3 py-1 rounded hover:bg-indigo-50"
-                                            >
-                                                Editar Plan
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {subscriptionData.length === 0 && (
-                                    <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">No hay suscripciones registradas.</td></tr>
+                                {clientData.map((client) => {
+                                    const sub = subscriptionData.find(s => s.owner_id === client.id);
+                                    return (
+                                        <tr key={client.id} className="hover:bg-gray-50 transition">
+                                            <td className="px-6 py-4">
+                                                <div className="font-bold text-gray-900">{client.full_name}</div>
+                                                <div className="text-xs text-gray-500">{client.email}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {sub ? (
+                                                    <span className={`font-medium ${
+                                                        sub.plan_type === 'PREMIUM' ? 'text-indigo-600' : 
+                                                        sub.plan_type === 'ENTERPRISE' ? 'text-purple-600' : 'text-gray-600'
+                                                    }`}>
+                                                        {sub.plan_type}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">Sin Plan</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {sub ? formatCurrency(sub.price_per_month) : '-'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {sub?.end_date ? new Date(sub.end_date).toLocaleDateString('es-PY') : '-'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {sub ? (
+                                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                        sub.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 
+                                                        sub.status === 'EXPIRED' ? 'bg-red-100 text-red-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                    }`}>
+                                                        {sub.status}
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                                                        N/A
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                {sub ? (
+                                                    <button 
+                                                        onClick={() => openEditSubModal(sub)}
+                                                        className="text-indigo-600 hover:text-indigo-900 font-medium text-xs border border-indigo-200 px-3 py-1 rounded hover:bg-indigo-50"
+                                                    >
+                                                        Editar Plan
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => handleCreateSub(client.id)}
+                                                        className="text-green-600 hover:text-green-900 font-medium text-xs border border-green-200 px-3 py-1 rounded hover:bg-green-50"
+                                                    >
+                                                        Crear Plan
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                                {clientData.length === 0 && (
+                                    <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">No hay clientes registrados.</td></tr>
                                 )}
                             </tbody>
                         </table>
