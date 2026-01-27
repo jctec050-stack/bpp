@@ -3,8 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
-import { AdminVenueData, AdminProfileData, AdminSubscriptionData, AdminPaymentData } from '@/types';
-import { getAdminDashboardData, getAdminClientsData, getAdminSubscriptionsData, getAdminPaymentsData } from '@/services/dataService';
+import { AdminVenueData, AdminProfileData, AdminSubscriptionData, AdminPaymentData, SubscriptionPlan, SubscriptionStatus } from '@/types';
+import { getAdminDashboardData, getAdminClientsData, getAdminSubscriptionsData, getAdminPaymentsData, updateSubscription, updateUserProfile } from '@/services/dataService';
 
 const AdminDashboard = () => {
     const { user, isLoading: authLoading } = useAuth();
@@ -21,6 +21,20 @@ const AdminDashboard = () => {
     
     const [isLoading, setIsLoading] = useState(true);
 
+    // Edit Subscription State
+    const [isEditSubModalOpen, setIsEditSubModalOpen] = useState(false);
+    const [editingSub, setEditingSub] = useState<AdminSubscriptionData | null>(null);
+    const [subForm, setSubForm] = useState({
+        plan: 'FREE',
+        price: 0,
+        endDate: '',
+        status: 'ACTIVE'
+    });
+
+    // Edit RUC State
+    const [editingRuc, setEditingRuc] = useState<string | null>(null); // userId being edited
+    const [rucValue, setRucValue] = useState('');
+
     useEffect(() => {
         if (!authLoading && (!user || user.role !== 'ADMIN')) {
             router.push('/');
@@ -35,7 +49,6 @@ const AdminDashboard = () => {
     const loadData = async () => {
         setIsLoading(true);
         try {
-            // Load all data in parallel for simplicity (or split by tab if optimizing)
             const [venues, clients, subs, payments] = await Promise.all([
                 getAdminDashboardData(),
                 getAdminClientsData(),
@@ -54,6 +67,91 @@ const AdminDashboard = () => {
         }
     };
 
+    // Subscription Management
+    const openEditSubModal = (sub: AdminSubscriptionData) => {
+        setEditingSub(sub);
+        setSubForm({
+            plan: sub.plan_type,
+            price: sub.price_per_month,
+            endDate: sub.end_date || '',
+            status: sub.status
+        });
+        setIsEditSubModalOpen(true);
+    };
+
+    const handleSaveSub = async () => {
+        if (!editingSub) return;
+        
+        const currentSub = editingSub;
+
+        const success = await updateSubscription(currentSub.id, {
+            plan_type: subForm.plan as SubscriptionPlan,
+            price_per_month: subForm.price,
+            end_date: subForm.endDate || undefined,
+            status: subForm.status as SubscriptionStatus
+        });
+        if (success) {
+            setSubscriptionData(prev => prev.map(s => s.id === currentSub.id ? { 
+                ...s, 
+                plan_type: subForm.plan as SubscriptionPlan, 
+                price_per_month: subForm.price, 
+                end_date: subForm.endDate || undefined, 
+                status: subForm.status as SubscriptionStatus 
+            } : s));
+            setIsEditSubModalOpen(false);
+            setEditingSub(null);
+        } else {
+            alert('Error al actualizar la suscripción');
+        }
+    };
+
+    const markAsPaid = async (sub: AdminSubscriptionData) => {
+        if (!confirm(`¿Confirmar pago para ${sub.owner.full_name}? Se extenderá la suscripción por 30 días.`)) return;
+
+        const newEndDate = new Date();
+        newEndDate.setDate(newEndDate.getDate() + 30);
+        const endDateStr = newEndDate.toISOString().split('T')[0];
+
+        const success = await updateSubscription(sub.id, {
+            status: 'ACTIVE',
+            end_date: endDateStr
+        });
+
+        if (success) {
+            setSubscriptionData(prev => prev.map(s => s.id === sub.id ? { 
+                ...s, 
+                status: 'ACTIVE', 
+                end_date: endDateStr 
+            } : s));
+        } else {
+            alert('Error al actualizar el pago');
+        }
+    };
+
+    // RUC Management
+    const startEditRuc = (client: AdminProfileData) => {
+        setEditingRuc(client.id);
+        setRucValue(client.ruc || '');
+    };
+
+    const cancelEditRuc = () => {
+        setEditingRuc(null);
+        setRucValue('');
+    };
+
+    const handleSaveRuc = async (userId: string) => {
+        const success = await updateUserProfile(userId, { ruc: rucValue });
+        if (success) {
+            setClientData(prev => prev.map(c => c.id === userId ? { ...c, ruc: rucValue } : c));
+            // Update other states that might contain this user
+            setVenueData(prev => prev.map(v => v.owner_id === userId ? { ...v, owner: { ...v.owner, ruc: rucValue } } : v));
+            setSubscriptionData(prev => prev.map(s => s.owner_id === userId ? { ...s, owner: { ...s.owner, ruc: rucValue } } : s));
+            setEditingRuc(null);
+        } else {
+            alert('Error al guardar RUC');
+        }
+    };
+
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('es-PY', {
             style: 'currency',
@@ -61,6 +159,14 @@ const AdminDashboard = () => {
             minimumFractionDigits: 0,
             maximumFractionDigits: 0,
         }).format(amount);
+    };
+
+    const getDaysRemaining = (dateStr?: string) => {
+        if (!dateStr) return -1;
+        const end = new Date(dateStr);
+        const now = new Date();
+        const diffTime = end.getTime() - now.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     };
 
     if (authLoading || isLoading) {
@@ -121,46 +227,22 @@ const AdminDashboard = () => {
                 {/* Tabs */}
                 <div className="mb-6 border-b border-gray-200">
                     <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                        <button
-                            onClick={() => setActiveTab('venues')}
-                            className={`${
-                                activeTab === 'venues'
-                                    ? 'border-indigo-500 text-indigo-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                        >
-                            Complejos
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('clients')}
-                            className={`${
-                                activeTab === 'clients'
-                                    ? 'border-indigo-500 text-indigo-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                        >
-                            Clientes
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('subscriptions')}
-                            className={`${
-                                activeTab === 'subscriptions'
-                                    ? 'border-indigo-500 text-indigo-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                        >
-                            Suscripciones
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('payments')}
-                            className={`${
-                                activeTab === 'payments'
-                                    ? 'border-indigo-500 text-indigo-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                        >
-                            Facturación y Pagos
-                        </button>
+                        {['venues', 'clients', 'subscriptions', 'payments'].map((tab) => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab as any)}
+                                className={`${
+                                    activeTab === tab
+                                        ? 'border-indigo-500 text-indigo-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm capitalize`}
+                            >
+                                {tab === 'venues' ? 'Complejos' : 
+                                 tab === 'clients' ? 'Clientes (Dueños)' : 
+                                 tab === 'subscriptions' ? 'Suscripciones' : 
+                                 'Facturación y Pagos'}
+                            </button>
+                        ))}
                     </nav>
                 </div>
 
@@ -184,71 +266,55 @@ const AdminDashboard = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {venueData.map((venue) => (
-                                    <React.Fragment key={venue.id}>
-                                        <tr className="hover:bg-gray-50 transition">
-                                            <td className="px-6 py-4">
-                                                <div className="font-bold text-gray-900">{venue.name}</div>
-                                                <div className="text-xs text-gray-500 mt-1">
-                                                    Dueño: {venue.owner?.full_name || 'Sin nombre'}<br/>
-                                                    {venue.owner?.email}<br/>
-                                                    {venue.owner?.phone}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {venue.subscription ? (
-                                                    <div className="flex flex-col">
-                                                        <span className="font-medium text-indigo-600">{venue.subscription.plan_type}</span>
-                                                        <div className="text-xs text-gray-500 mt-1">
-                                                            {venue.subscription.status === 'ACTIVE' && (
-                                                                <span className="inline-flex items-center text-green-600">
-                                                                    ● {venue.subscription.status}
-                                                                </span>
-                                                            )}
-                                                            {venue.subscription.end_date && (
-                                                                <span className="block mt-0.5">
-                                                                    Vence: {new Date(venue.subscription.end_date).toLocaleDateString('es-PY')}
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                    <tr key={venue.id} className="hover:bg-gray-50 transition">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-gray-900">{venue.name}</div>
+                                            <div className="text-xs text-gray-500 mt-1">
+                                                Dueño: {venue.owner?.full_name || 'Sin nombre'}<br/>
+                                                {venue.owner?.email}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {venue.subscription ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-medium text-indigo-600">{venue.subscription.plan_type}</span>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        {venue.subscription.status === 'ACTIVE' && (
+                                                            <span className="inline-flex items-center text-green-600">
+                                                                ● {venue.subscription.status}
+                                                            </span>
+                                                        )}
+                                                        {venue.subscription.end_date && (
+                                                            <span className="block mt-0.5">
+                                                                Vence: {new Date(venue.subscription.end_date).toLocaleDateString('es-PY')}
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                ) : (
-                                                    <span className="text-xs text-gray-400 italic">Sin suscripción</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className="font-bold text-gray-700">{venue.courts?.length || 0}</span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="font-bold text-gray-900">{formatCurrency(venue.total_revenue)}</span>
-                                                {/* Revenue breakdown tooltip or summary */}
-                                                <div className="text-xs text-gray-500 mt-1">
-                                                    {venue.courts?.map(court => (
-                                                        <div key={court.id} className="flex justify-end gap-2">
-                                                            <span>{court.name}:</span>
-                                                            <span>{formatCurrency(venue.revenue_by_court[court.id] || 0)}</span>
-                                                        </div>
-                                                    ))}
                                                 </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="font-bold text-gray-700">{venue.total_bookings}</span>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                    venue.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                                }`}>
-                                                    {venue.is_active ? 'Publicado' : 'Oculto'}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </React.Fragment>
-                                ))}
-                                {venueData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                                            No hay complejos registrados aún.
+                                            ) : (
+                                                <span className="text-xs text-gray-400 italic">Sin suscripción</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="font-bold text-gray-700">{venue.courts?.length || 0}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="font-bold text-gray-900">{formatCurrency(venue.total_revenue)}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="font-bold text-gray-700">{venue.total_bookings}</span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                                venue.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                            }`}>
+                                                {venue.is_active ? 'Publicado' : 'Oculto'}
+                                            </span>
                                         </td>
                                     </tr>
+                                ))}
+                                {venueData.length === 0 && (
+                                    <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">No hay complejos registrados.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -259,7 +325,7 @@ const AdminDashboard = () => {
                 {activeTab === 'clients' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="p-6 border-b border-gray-200">
-                        <h2 className="text-xl font-bold text-gray-900">Lista de Clientes</h2>
+                        <h2 className="text-xl font-bold text-gray-900">Lista de Dueños de Canchas</h2>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
@@ -283,11 +349,7 @@ const AdminDashboard = () => {
                                             <div className="text-gray-500 text-xs">{client.phone || 'Sin teléfono'}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                client.role === 'OWNER' ? 'bg-purple-100 text-purple-800' : 
-                                                client.role === 'ADMIN' ? 'bg-gray-800 text-white' : 
-                                                'bg-blue-100 text-blue-800'
-                                            }`}>
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
                                                 {client.role}
                                             </span>
                                         </td>
@@ -297,11 +359,7 @@ const AdminDashboard = () => {
                                     </tr>
                                 ))}
                                 {clientData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
-                                            No hay clientes registrados.
-                                        </td>
-                                    </tr>
+                                    <tr><td colSpan={4} className="px-6 py-12 text-center text-gray-500">No hay clientes (dueños) registrados.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -318,47 +376,56 @@ const AdminDashboard = () => {
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
                                 <tr>
-                                    <th className="px-6 py-4">Dueño</th>
-                                    <th className="px-6 py-4">Plan</th>
+                                    <th className="px-6 py-4">Cliente</th>
+                                    <th className="px-6 py-4">Plan Actual</th>
+                                    <th className="px-6 py-4">Precio Mes</th>
+                                    <th className="px-6 py-4">Vencimiento</th>
                                     <th className="px-6 py-4">Estado</th>
-                                    <th className="px-6 py-4">Periodo</th>
-                                    <th className="px-6 py-4 text-right">Precio/Mes</th>
+                                    <th className="px-6 py-4 text-center">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {subscriptionData.map((sub) => (
                                     <tr key={sub.id} className="hover:bg-gray-50 transition">
                                         <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-900">{sub.owner?.full_name || 'Desconocido'}</div>
+                                            <div className="font-bold text-gray-900">{sub.owner?.full_name}</div>
                                             <div className="text-xs text-gray-500">{sub.owner?.email}</div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="font-medium text-indigo-600">{sub.plan_type}</span>
+                                            <span className={`font-medium ${
+                                                sub.plan_type === 'PREMIUM' ? 'text-indigo-600' : 
+                                                sub.plan_type === 'ENTERPRISE' ? 'text-purple-600' : 'text-gray-600'
+                                            }`}>
+                                                {sub.plan_type}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {formatCurrency(sub.price_per_month)}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {sub.end_date ? new Date(sub.end_date).toLocaleDateString('es-PY') : '-'}
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                                 sub.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 
-                                                sub.status === 'EXPIRED' ? 'bg-orange-100 text-orange-800' :
-                                                'bg-red-100 text-red-800'
+                                                sub.status === 'EXPIRED' ? 'bg-red-100 text-red-800' :
+                                                'bg-gray-100 text-gray-800'
                                             }`}>
                                                 {sub.status}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-gray-500">
-                                            {new Date(sub.start_date).toLocaleDateString('es-PY')} 
-                                            {sub.end_date ? ` - ${new Date(sub.end_date).toLocaleDateString('es-PY')}` : ' (Indefinido)'}
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-medium">
-                                            {formatCurrency(sub.price_per_month)}
+                                        <td className="px-6 py-4 text-center">
+                                            <button 
+                                                onClick={() => openEditSubModal(sub)}
+                                                className="text-indigo-600 hover:text-indigo-900 font-medium text-xs border border-indigo-200 px-3 py-1 rounded hover:bg-indigo-50"
+                                            >
+                                                Editar Plan
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
                                 {subscriptionData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                                            No hay suscripciones registradas.
-                                        </td>
-                                    </tr>
+                                    <tr><td colSpan={6} className="px-6 py-12 text-center text-gray-500">No hay suscripciones registradas.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -369,61 +436,105 @@ const AdminDashboard = () => {
                 {activeTab === 'payments' && (
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="p-6 border-b border-gray-200">
-                        <h2 className="text-xl font-bold text-gray-900">Historial de Pagos</h2>
+                        <h2 className="text-xl font-bold text-gray-900">Facturación y Estado de Pagos</h2>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
                             <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-100">
                                 <tr>
-                                    <th className="px-6 py-4">Fecha</th>
-                                    <th className="px-6 py-4">Pagador</th>
-                                    <th className="px-6 py-4">Tipo</th>
-                                    <th className="px-6 py-4">Método</th>
-                                    <th className="px-6 py-4">Estado</th>
-                                    <th className="px-6 py-4 text-right">Monto</th>
+                                    <th className="px-6 py-4">Cliente</th>
+                                    <th className="px-6 py-4">Contacto</th>
+                                    <th className="px-6 py-4">RUC (Facturación)</th>
+                                    <th className="px-6 py-4">Estado de Cuenta</th>
+                                    <th className="px-6 py-4 text-center">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {paymentData.map((payment) => (
-                                    <tr key={payment.id} className="hover:bg-gray-50 transition">
-                                        <td className="px-6 py-4 text-gray-500">
-                                            {new Date(payment.created_at).toLocaleDateString('es-PY')}
-                                            <div className="text-xs text-gray-400">
-                                                {new Date(payment.created_at).toLocaleTimeString('es-PY')}
+                                {subscriptionData.map((sub) => {
+                                    const daysLeft = getDaysRemaining(sub.end_date);
+                                    const isExpiringSoon = sub.status === 'ACTIVE' && daysLeft <= 5 && daysLeft >= 0;
+                                    const isExpired = sub.status === 'EXPIRED' || (sub.status === 'ACTIVE' && daysLeft < 0);
+
+                                    return (
+                                    <tr key={sub.id} className="hover:bg-gray-50 transition">
+                                        <td className="px-6 py-4">
+                                            <div className="font-bold text-gray-900">{sub.owner?.full_name}</div>
+                                            <div className="text-xs text-gray-500">Plan: {sub.plan_type}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-gray-900">{sub.owner?.email}</div>
+                                            <div className="text-gray-500 text-xs">{sub.owner?.phone || 'Sin teléfono'}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {editingRuc === sub.owner_id ? (
+                                                <div className="flex items-center gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        value={rucValue} 
+                                                        onChange={(e) => setRucValue(e.target.value)}
+                                                        className="w-24 px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                                        placeholder="RUC..."
+                                                    />
+                                                    <button onClick={() => handleSaveRuc(sub.owner_id)} className="text-green-600 hover:text-green-800">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                                                    </button>
+                                                    <button onClick={cancelEditRuc} className="text-red-600 hover:text-red-800">
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2 group">
+                                                    <span className="text-gray-700 font-mono">{sub.owner?.ruc || '---'}</span>
+                                                    <button 
+                                                        onClick={() => startEditRuc(sub.owner as AdminProfileData)}
+                                                        className="text-gray-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        title="Editar RUC"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col gap-1">
+                                                {sub.status === 'ACTIVE' && !isExpiringSoon && !isExpired && (
+                                                    <span className="inline-flex w-fit items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        Pagado (Activo)
+                                                    </span>
+                                                )}
+                                                {isExpiringSoon && (
+                                                    <span className="inline-flex w-fit items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                                        ⚠️ Por vencer ({daysLeft} días)
+                                                    </span>
+                                                )}
+                                                {isExpired && (
+                                                    <span className="inline-flex w-fit items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                        Vencido
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-gray-500">
+                                                    Vence: {sub.end_date ? new Date(sub.end_date).toLocaleDateString('es-PY') : '-'}
+                                                </span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <div className="font-bold text-gray-900">{payment.payer?.full_name || 'Desconocido'}</div>
-                                            <div className="text-xs text-gray-500">{payment.payer?.email}</div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                                {payment.payment_type}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-gray-600">
-                                            {payment.payment_method}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                payment.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : 
-                                                payment.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                                                'bg-red-100 text-red-800'
-                                            }`}>
-                                                {payment.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-bold text-gray-900">
-                                            {formatCurrency(payment.amount)}
+                                        <td className="px-6 py-4 text-center">
+                                            {sub.status !== 'ACTIVE' || isExpiringSoon || isExpired ? (
+                                                <button 
+                                                    onClick={() => markAsPaid(sub)}
+                                                    className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 text-green-700 text-xs font-medium rounded border border-green-200 hover:bg-green-100 transition"
+                                                    title="Marcar como pagado (Extender 30 días)"
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                                                    Registrar Pago
+                                                </button>
+                                            ) : (
+                                                <span className="text-xs text-gray-400">Al día</span>
+                                            )}
                                         </td>
                                     </tr>
-                                ))}
-                                {paymentData.length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                                            No hay pagos registrados.
-                                        </td>
-                                    </tr>
+                                )})}
+                                {subscriptionData.length === 0 && (
+                                    <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">No hay datos de facturación.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -431,6 +542,80 @@ const AdminDashboard = () => {
                 </div>
                 )}
             </div>
+
+            {/* Edit Subscription Modal */}
+            {isEditSubModalOpen && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-gray-900 mb-4">Editar Suscripción</h3>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Plan</label>
+                                <select 
+                                    value={subForm.plan}
+                                    onChange={(e) => setSubForm({...subForm, plan: e.target.value})}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="FREE">FREE</option>
+                                    <option value="BASIC">BASIC</option>
+                                    <option value="PREMIUM">PREMIUM</option>
+                                    <option value="ENTERPRISE">ENTERPRISE</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mensual (Gs)</label>
+                                <input 
+                                    type="number"
+                                    value={subForm.price}
+                                    onChange={(e) => setSubForm({...subForm, price: Number(e.target.value)})}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Vencimiento</label>
+                                <input 
+                                    type="date"
+                                    value={subForm.endDate}
+                                    onChange={(e) => setSubForm({...subForm, endDate: e.target.value})}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                                <select 
+                                    value={subForm.status}
+                                    onChange={(e) => setSubForm({...subForm, status: e.target.value})}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="ACTIVE">Activo</option>
+                                    <option value="EXPIRED">Vencido</option>
+                                    <option value="CANCELLED">Cancelado</option>
+                                    <option value="PENDING_PAYMENT">Pendiente de Pago</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-8">
+                            <button 
+                                onClick={() => setIsEditSubModalOpen(false)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={handleSaveSub}
+                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                            >
+                                Guardar Cambios
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

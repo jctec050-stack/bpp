@@ -5,7 +5,7 @@ export type BookingStatus = 'ACTIVE' | 'CANCELLED' | 'COMPLETED';
 export type PaymentStatus = 'PENDING' | 'PAID' | 'REFUNDED';
 export type PaymentMethod = 'CASH' | 'CARD' | 'TRANSFER' | 'QR';
 export type SubscriptionPlan = 'FREE' | 'BASIC' | 'PREMIUM' | 'ENTERPRISE';
-export type SubscriptionStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'SUSPENDED';
+export type SubscriptionStatus = 'ACTIVE' | 'CANCELLED' | 'EXPIRED' | 'SUSPENDED' | 'PENDING_PAYMENT';
 export type NotificationType = 'BOOKING' | 'PAYMENT' | 'SYSTEM' | 'PROMOTION';
 
 // ============================================
@@ -16,6 +16,7 @@ export interface Profile {
   email: string;
   full_name: string;
   phone?: string;
+  ruc?: string; // Tax ID
   role: UserRole;
   created_at: string;
   updated_at: string;

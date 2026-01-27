@@ -593,6 +593,7 @@ export const getAdminClientsData = async (): Promise<AdminProfileData[]> => {
         const { data: profiles, error } = await supabase
             .from('profiles')
             .select('*')
+            .eq('role', 'OWNER') // Filter for Owners only
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -641,17 +642,34 @@ export const getAdminPaymentsData = async (): Promise<AdminPaymentData[]> => {
     }
 };
 
-export const updateUserProfile = async (userId: string, updates: Partial<Profile>): Promise<boolean> => {
+export const updateUserProfile = async (userId: string, updates: Partial<Profile>): Promise<Profile | null> => {
     try {
-        const { error } = await supabase
+        const { data, error } = await supabase
             .from('profiles')
             .update(updates)
-            .eq('id', userId);
+            .eq('id', userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as Profile;
+    } catch (error) {
+        console.error('❌ Error updating profile:', error);
+        return null;
+    }
+};
+
+export const updateSubscription = async (subId: string, updates: Partial<Subscription>): Promise<boolean> => {
+    try {
+        const { error } = await supabase
+            .from('subscriptions')
+            .update(updates)
+            .eq('id', subId);
 
         if (error) throw error;
         return true;
     } catch (error) {
-        console.error('❌ Error updating profile:', error);
+        console.error('❌ Error updating subscription:', error);
         return false;
     }
 };
