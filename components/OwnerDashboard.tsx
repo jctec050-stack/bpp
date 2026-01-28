@@ -227,56 +227,6 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, disabl
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h5 className="text-lg font-bold text-gray-800 mb-6">Ingresos (Últimos 7 días hasta {selectedDate})</h5>
-          <div className="h-64">
-            <ResponsiveContainer width="99%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={10} tickFormatter={(val) => val.split('-')[2] + '/' + val.split('-')[1]} />
-                <YAxis fontSize={12} />
-                <Tooltip formatter={(value: any) => [`Gs. ${(value || 0).toLocaleString('es-PY')}`, 'Ingresos']} />
-                <Bar dataKey="revenue" fill="#4F46E5" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <h5 className="text-lg font-bold text-gray-800 mb-6">Distribución por Deporte ({selectedDate})</h5>
-          <div className="h-64 flex flex-col items-center">
-            {sportDistribution.length > 0 ? (
-              <>
-                <ResponsiveContainer width="99%" height={256}>
-                  <PieChart>
-                    <Pie data={sportDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                      {sportDistribution.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex gap-4 mt-2">
-                  {sportDistribution.map((entry: any, index: number) => (
-                    <div key={entry.name} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                      <span className="text-xs text-gray-600 font-medium">{entry.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                No hay datos para este día
-              </div>
-            )}
-
-          </div>
-        </div>
-      </div>
-
       {/* Schedule Table (Desktop) */}
       <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 border-b border-gray-100">
@@ -382,6 +332,56 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ bookings, disabl
                 No hay actividad registrada
             </div>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <h5 className="text-lg font-bold text-gray-800 mb-6">Ingresos (Últimos 7 días hasta {selectedDate})</h5>
+          <div className="h-64">
+            <ResponsiveContainer width="99%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" fontSize={10} tickFormatter={(val) => val.split('-')[2] + '/' + val.split('-')[1]} />
+                <YAxis fontSize={12} />
+                <Tooltip formatter={(value: any) => [`Gs. ${(value || 0).toLocaleString('es-PY')}`, 'Ingresos']} />
+                <Bar dataKey="revenue" fill="#4F46E5" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <h5 className="text-lg font-bold text-gray-800 mb-6">Distribución por Deporte ({selectedDate})</h5>
+          <div className="h-64 flex flex-col items-center">
+            {sportDistribution.length > 0 ? (
+              <>
+                <ResponsiveContainer width="99%" height={256}>
+                  <PieChart>
+                    <Pie data={sportDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                      {sportDistribution.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex gap-4 mt-2">
+                  {sportDistribution.map((entry: any, index: number) => (
+                    <div key={entry.name} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                      <span className="text-xs text-gray-600 font-medium">{entry.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                No hay datos para este día
+              </div>
+            )}
+
+          </div>
+        </div>
       </div>
 
     </div>
