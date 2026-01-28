@@ -1,18 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Booking } from '@/types';
-import { getBookings, cancelBooking, deleteBooking } from '@/services/dataService';
+import { cancelBooking, deleteBooking } from '@/services/dataService';
+import { usePlayerBookings } from '@/hooks/useData';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
 import { Toast } from '@/components/Toast';
 
 export default function BookingsPage() {
     const { user, isLoading } = useAuth();
     const router = useRouter();
-    const [bookings, setBookings] = useState<Booking[]>([]);
-    const [loadingData, setLoadingData] = useState(true);
+    const { bookings, isLoading: isLoadingBookings, mutate } = usePlayerBookings(user?.id);
     const [bookingToCancel, setBookingToCancel] = useState<string[] | null>(null);
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
 
@@ -26,35 +26,6 @@ export default function BookingsPage() {
             return;
         }
     }, [user, isLoading, router]);
-
-    const fetchData = useCallback(async () => {
-        if (!user) return;
-        try {
-            setLoadingData(true);
-            const fetchedBookings = await getBookings(); // Fetch all bookings for player (API should filter by RLS ideally, or we filter here)
-            // The service `getBookings` without args fetches all?
-            // Checking service: `getBookings(ownerId)`... if no ownerId, it fetches all?
-            // RLS should handle "my bookings".
-            // Let's assume `getBookings` returns what we need or we filter client side if needed (but RLS is better).
-            // Actually MainApp used: `getBookings(user.role === 'OWNER' ? user.id : undefined)`
-            // If undefined, it gets all bookings? That sounds insecure if RLS is off.
-            // But we are in "Professional Refactor", I should fix this later in RLS step.
-            // For now, let's use the same call.
-            const allBookings = await getBookings(); 
-            // Filter for current player just in case
-            setBookings(allBookings.filter(b => b.player_id === user.id));
-        } catch (error) {
-            console.error('Error fetching bookings:', error);
-        } finally {
-            setLoadingData(false);
-        }
-    }, [user]);
-
-    useEffect(() => {
-        if (user?.role === 'PLAYER') {
-            fetchData();
-        }
-    }, [fetchData, user?.role]);
 
     const getGroupedBookings = (bookings: Booking[]) => {
         const groups: { [key: string]: Booking[] } = {};
@@ -115,7 +86,7 @@ export default function BookingsPage() {
             const successCount = results.filter(r => r).length;
 
             if (successCount > 0) {
-                await fetchData();
+                await mutate();
                 setToast({ message: `${successCount} reserva(s) actualizadas.`, type: 'success' });
             } else {
                 setToast({ message: 'Error al procesar la solicitud.', type: 'error' });
@@ -127,7 +98,7 @@ export default function BookingsPage() {
         setBookingToCancel(null);
     };
 
-    if (isLoading || loadingData) {
+    if (isLoading || isLoadingBookings) {
         return (
              <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>

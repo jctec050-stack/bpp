@@ -1,39 +1,49 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Venue, Booking, DisabledSlot, Court } from '@/types';
-import { getVenues, getBookings, getDisabledSlots, createBooking } from '@/services/dataService';
+import { Venue, Court } from '@/types';
+import { createBooking } from '@/services/dataService';
 import { TIME_SLOTS } from '@/constants';
 import { CourtCard } from '@/components/CourtCard';
 import { Toast } from '@/components/Toast';
+import { useVenues, useBookings, useDisabledSlots } from '@/hooks/useData';
 
 export default function HomePage() {
-    const { user, isLoading } = useAuth();
+    const { user, isLoading: authLoading } = useAuth();
     const router = useRouter();
-    const [venues, setVenues] = useState<Venue[]>([]);
-    const [bookings, setBookings] = useState<Booking[]>([]);
-    const [disabledSlots, setDisabledSlots] = useState<DisabledSlot[]>([]);
+
+    // SWR Hooks
+    const { venues, isLoading: venuesLoading } = useVenues();
+    const { bookings, isLoading: bookingsLoading, mutate: mutateBookings } = useBookings();
+    
+    // State
     const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-    const [loadingData, setLoadingData] = useState(true);
+    
+    // Disabled slots depend on selected venue and date
+    const { disabledSlots, isLoading: slotsLoading } = useDisabledSlots(selectedVenue?.id || null, selectedDate);
+
     const [userLocation, setUserLocation] = useState<{ lat: number, lng: number } | null>(null);
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
 
     const [selectedSlots, setSelectedSlots] = useState<{ courtId: string, time: string, price: number, courtName: string }[]>([]);
     const [selectedPlayerCourtId, setSelectedPlayerCourtId] = useState<string | null>(null);
 
+    // Combine loading states
+    const isLoadingData = venuesLoading || bookingsLoading || (selectedVenue ? slotsLoading : false);
+
     useEffect(() => {
-        if (!isLoading && !user) {
+        if (!authLoading && !user) {
             router.push('/login');
             return;
         }
-        if (!isLoading && user?.role === 'OWNER') {
+        if (!authLoading && user?.role === 'OWNER') {
             router.push('/dashboard');
             return;
         }
-    }, [user, isLoading, router]);
+    }, [user, authLoading, router]);
 
     // Geolocation
     useEffect(() => {
@@ -50,52 +60,6 @@ export default function HomePage() {
             );
         }
     }, []);
-
-    const fetchData = useCallback(async () => {
-        if (!user) return;
-        try {
-            setLoadingData(true);
-            const fetchedVenues = await getVenues(); // All venues for player
-            setVenues(fetchedVenues);
-
-            // Fetch bookings to check availability
-            // TODO: Filter by date/venue for optimization
-            const fetchedBookings = await getBookings();
-            setBookings(fetchedBookings);
-
-            // Fetch disabled slots if we have a venue selected or for the first venue to start
-            if (fetchedVenues.length > 0) {
-                 // Ideally we fetch disabled slots when selecting a venue, but for now lets fetch for the first one or when venue is selected
-            }
-        } catch (error) {
-            console.error('Error fetching home data:', error);
-            setToast({ message: 'Error al cargar datos.', type: 'error' });
-        } finally {
-            setLoadingData(false);
-        }
-    }, [user]);
-
-    useEffect(() => {
-        if (user?.role === 'PLAYER') {
-            fetchData();
-        }
-    }, [fetchData, user?.role]);
-
-    // Fetch disabled slots when venue or date changes
-    useEffect(() => {
-        const fetchDisabled = async () => {
-            if (selectedVenue && selectedDate) {
-                 try {
-                    const fetchedSlots = await getDisabledSlots(selectedVenue.id, selectedDate);
-                    setDisabledSlots(fetchedSlots);
-                } catch (error) {
-                    console.error('Error fetching disabled slots:', error);
-                }
-            }
-        };
-        fetchDisabled();
-    }, [selectedVenue, selectedDate]);
-
 
     const sortedVenues = useMemo(() => {
         if (!userLocation || venues.length === 0) return venues;
@@ -167,12 +131,9 @@ export default function HomePage() {
         }
 
         if (successCount > 0) {
-            await fetchData();
-            // In a real app we might redirect to bookings page or show a success modal
+            await mutateBookings(); // Refetch bookings to update availability
             setToast({ message: `¡${successCount} reserva(s) confirmada(s)!`, type: 'success' });
             setSelectedSlots([]);
-            // Optionally redirect to bookings
-            // router.push('/bookings'); 
         }
 
         if (failCount > 0) {
@@ -180,7 +141,7 @@ export default function HomePage() {
         }
     };
 
-    if (isLoading || loadingData) {
+    if (authLoading || (isLoadingData && venues.length === 0)) { // Show loading only if no data yet (SWR stale-while-revalidate)
          return (
              <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
@@ -200,11 +161,6 @@ export default function HomePage() {
                             <h2 className="text-3xl font-extrabold text-gray-900">Busca tu Cancha</h2>
                             <p className="text-gray-500 mt-1">Explora complejos de padel y beach tennis cerca de ti.</p>
                         </div>
-                        {/* Date Selector could go here or inside venue details. 
-                            MainApp had it here to filter availability across venues? 
-                            Actually MainApp just passed selectedDate to venue details.
-                            Let's keep it here if we want to filter venues by availability in the future.
-                        */}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

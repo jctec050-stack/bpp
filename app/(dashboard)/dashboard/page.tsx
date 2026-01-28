@@ -1,20 +1,20 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Venue, Booking, DisabledSlot } from '@/types';
-import { getVenues, getBookings, getDisabledSlots } from '@/services/dataService';
+import { getDisabledSlots } from '@/services/dataService';
+import { useOwnerVenues, useOwnerBookings } from '@/hooks/useData';
 import { OwnerDashboard } from '@/components/OwnerDashboard';
 
 export default function DashboardPage() {
     const { user, isLoading } = useAuth();
     const router = useRouter();
-    const [venues, setVenues] = useState<Venue[]>([]);
-    const [bookings, setBookings] = useState<Booking[]>([]);
+    const { venues, isLoading: venuesLoading } = useOwnerVenues(user?.id);
+    const { bookings, isLoading: bookingsLoading } = useOwnerBookings(user?.id);
     const [disabledSlots, setDisabledSlots] = useState<DisabledSlot[]>([]);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-    const [loadingData, setLoadingData] = useState(true);
     const [loadingSlots, setLoadingSlots] = useState(false);
 
     useEffect(() => {
@@ -27,30 +27,6 @@ export default function DashboardPage() {
             return;
         }
     }, [user, isLoading, router]);
-
-    // Initial fetch for Venues and Bookings (Run once)
-    useEffect(() => {
-        const fetchInitialData = async () => {
-            if (!user) return;
-            try {
-                setLoadingData(true);
-                const fetchedVenues = await getVenues(user.id);
-                setVenues(fetchedVenues);
-                
-                // TODO: Optimize fetching by date range if dataset grows
-                const fetchedBookings = await getBookings(user.id);
-                setBookings(fetchedBookings);
-            } catch (error) {
-                console.error('Error fetching dashboard data:', error);
-            } finally {
-                setLoadingData(false);
-            }
-        };
-
-        if (user?.role === 'OWNER') {
-            fetchInitialData();
-        }
-    }, [user]);
 
     // Fetch Disabled Slots when Date or Venue changes
     useEffect(() => {
@@ -72,7 +48,7 @@ export default function DashboardPage() {
         fetchDisabledSlots();
     }, [selectedDate, venues]);
 
-    if (isLoading || loadingData) {
+    if (isLoading || venuesLoading || bookingsLoading) {
         return (
              <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>

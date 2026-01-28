@@ -1,21 +1,21 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Venue, Booking, DisabledSlot } from '@/types';
-import { getVenues, getBookings, getDisabledSlots, toggleSlotAvailability } from '@/services/dataService';
+import { toggleSlotAvailability } from '@/services/dataService';
+import { useOwnerVenues, useOwnerBookings, useDisabledSlots } from '@/hooks/useData';
 import { ScheduleManager } from '@/components/ScheduleManager';
 import { Toast } from '@/components/Toast';
 
 export default function SchedulePage() {
     const { user, isLoading } = useAuth();
     const router = useRouter();
-    const [venues, setVenues] = useState<Venue[]>([]);
-    const [bookings, setBookings] = useState<Booking[]>([]);
-    const [disabledSlots, setDisabledSlots] = useState<DisabledSlot[]>([]);
+    const { venues, isLoading: venuesLoading } = useOwnerVenues(user?.id);
+    const { bookings, isLoading: bookingsLoading } = useOwnerBookings(user?.id);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-    const [loadingData, setLoadingData] = useState(true);
+    const { disabledSlots, isLoading: slotsLoading, mutate: mutateSlots } = useDisabledSlots(venues[0]?.id || null, selectedDate);
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
 
     useEffect(() => {
@@ -29,48 +29,19 @@ export default function SchedulePage() {
         }
     }, [user, isLoading, router]);
 
-    const fetchData = useCallback(async () => {
-        if (!user) return;
-        try {
-            setLoadingData(true);
-            const fetchedVenues = await getVenues(user.id);
-            setVenues(fetchedVenues);
-            
-            const fetchedBookings = await getBookings(user.id);
-            setBookings(fetchedBookings);
-
-            if (fetchedVenues.length > 0) {
-                 const fetchedSlots = await getDisabledSlots(fetchedVenues[0].id, selectedDate);
-                 setDisabledSlots(fetchedSlots);
-            }
-
-        } catch (error) {
-            console.error('Error fetching schedule data:', error);
-        } finally {
-            setLoadingData(false);
-        }
-    }, [user, selectedDate]);
-
-    useEffect(() => {
-        if (user?.role === 'OWNER') {
-            fetchData();
-        }
-    }, [fetchData, user?.role]);
-
     const handleToggleSlot = async (courtId: string, date: string, timeSlot: string, reason?: string) => {
         if (!user || !venues[0]) return;
 
         const success = await toggleSlotAvailability(venues[0].id, courtId, date, timeSlot, reason);
 
         if (success) {
-            const fetchedSlots = await getDisabledSlots(venues[0].id, date);
-            setDisabledSlots(fetchedSlots);
+            await mutateSlots();
         } else {
             setToast({ message: "Error al actualizar el horario.", type: 'error' });
         }
     };
 
-    if (isLoading || loadingData) {
+    if (isLoading || venuesLoading || bookingsLoading || (venues.length > 0 && slotsLoading)) {
         return (
              <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>

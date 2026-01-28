@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/AuthContext';
 import { useRouter } from 'next/navigation';
 import { Venue, Court } from '@/types';
-import { getVenues, createVenueWithCourts, updateVenue, addCourts, deleteCourt } from '@/services/dataService';
+import { createVenueWithCourts, updateVenue, addCourts, deleteCourt } from '@/services/dataService';
+import { useOwnerVenues } from '@/hooks/useData';
 import { ManageVenues } from '@/components/ManageVenues';
 import { AddCourtModal } from '@/components/AddCourtModal';
 import { Toast } from '@/components/Toast';
@@ -12,8 +13,7 @@ import { Toast } from '@/components/Toast';
 export default function VenuesPage() {
     const { user, isLoading } = useAuth();
     const router = useRouter();
-    const [venues, setVenues] = useState<Venue[]>([]);
-    const [loadingData, setLoadingData] = useState(true);
+    const { venues, isLoading: isLoadingVenues, mutate } = useOwnerVenues(user?.id);
     const [showAddCourtModal, setShowAddCourtModal] = useState(false);
     const [venueToEdit, setVenueToEdit] = useState<Venue | null>(null);
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
@@ -28,25 +28,6 @@ export default function VenuesPage() {
             return;
         }
     }, [user, isLoading, router]);
-
-    const fetchData = useCallback(async () => {
-        if (!user) return;
-        try {
-            setLoadingData(true);
-            const fetchedVenues = await getVenues(user.id);
-            setVenues(fetchedVenues);
-        } catch (error) {
-            console.error('Error fetching venues:', error);
-        } finally {
-            setLoadingData(false);
-        }
-    }, [user]);
-
-    useEffect(() => {
-        if (user?.role === 'OWNER') {
-            fetchData();
-        }
-    }, [fetchData, user?.role]);
 
     const handleEditVenue = (venue: Venue) => {
         setVenueToEdit(venue);
@@ -93,7 +74,7 @@ export default function VenuesPage() {
                     if (newCourts.length > 0) {
                         await addCourts(venueToEdit.id, newCourts);
                     }
-                    await fetchData();
+                    await mutate();
                     setToast({ message: 'Complejo actualizado correctamente', type: 'success' });
                     setVenueToEdit(null);
                 } else {
@@ -117,7 +98,7 @@ export default function VenuesPage() {
                 );
 
                 if (success) {
-                    await fetchData();
+                    await mutate();
                     setToast({ message: '¡Complejo creado exitosamente!', type: 'success' });
                 } else {
                     throw new Error('Failed to create venue');
@@ -130,7 +111,7 @@ export default function VenuesPage() {
         setShowAddCourtModal(false); // Close modal
     };
 
-    if (isLoading || loadingData) {
+    if (isLoading || isLoadingVenues) {
         return (
              <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
@@ -158,7 +139,7 @@ export default function VenuesPage() {
 
             <ManageVenues
                 venues={venues}
-                onVenueDeleted={fetchData}
+                onVenueDeleted={() => mutate()}
                 onEditVenue={handleEditVenue}
             />
 
