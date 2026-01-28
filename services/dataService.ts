@@ -294,7 +294,8 @@ export const getBookings = async (ownerId?: string): Promise<Booking[]> => {
             // Flatten nested relations to match Booking interface if needed
             // Checking types.ts, Booking interface has player_name, venue_name via interface extension?
             // Yes, checking types.ts: populated fields are part of interface.
-            player_name: (b.profiles as any)?.full_name,
+            player_name: b.player_name || (b.profiles as any)?.full_name,
+            player_phone: b.player_phone || (b.profiles as any)?.phone,
             venue_name: (b.venues as any)?.name,
             venue_address: (b.venues as any)?.address,
             venue_contact_info: (b.venues as any)?.contact_info,

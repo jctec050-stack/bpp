@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Court, Booking } from '@/types';
-import { createRecurringBookings, getProfileByEmail } from '@/services/dataService';
+import { createRecurringBookings } from '@/services/dataService';
 import { TIME_SLOTS } from '@/constants';
+import { supabase } from '@/lib/supabase';
 
 interface RecurringBookingModalProps {
     isOpen: boolean;
@@ -19,7 +20,9 @@ export const RecurringBookingModal: React.FC<RecurringBookingModalProps> = ({
     onSuccess
 }) => {
     const [loading, setLoading] = useState(false);
-    const [playerEmail, setPlayerEmail] = useState('');
+    const [playerName, setPlayerName] = useState('');
+    const [playerPhone, setPlayerPhone] = useState('');
+    const [ownerId, setOwnerId] = useState<string | null>(null);
     const [selectedCourtId, setSelectedCourtId] = useState(courts[0]?.id || '');
     const [dayOfWeek, setDayOfWeek] = useState<number>(new Date().getDay());
     const [startTime, setStartTime] = useState('18:00');
@@ -32,6 +35,14 @@ export const RecurringBookingModal: React.FC<RecurringBookingModalProps> = ({
     });
     const [price, setPrice] = useState<number>(courts[0]?.price_per_hour || 0);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const getOwnerId = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) setOwnerId(user.id);
+        };
+        getOwnerId();
+    }, []);
 
     if (!isOpen) return null;
 
@@ -66,19 +77,21 @@ export const RecurringBookingModal: React.FC<RecurringBookingModalProps> = ({
         setLoading(true);
 
         try {
-            // 1. Find Player
-            const player = await getProfileByEmail(playerEmail);
-            if (!player) {
-                setError('Jugador no encontrado con ese email.');
+            if (!ownerId) {
+                setError('No se pudo identificar al usuario propietario.');
                 setLoading(false);
                 return;
             }
 
-            // 2. Prepare Booking Template
+            // 1. Prepare Booking Template
+            // Use ownerId as player_id fallback (assuming DB requires it)
+            // Store actual player info in player_name/phone fields
             const bookingTemplate = {
                 venue_id: venueId,
                 court_id: selectedCourtId,
-                player_id: player.id,
+                player_id: ownerId, 
+                player_name: playerName,
+                player_phone: playerPhone,
                 start_time: startTime,
                 end_time: endTime,
                 price: price,
@@ -87,7 +100,7 @@ export const RecurringBookingModal: React.FC<RecurringBookingModalProps> = ({
                 notes: 'Reserva Recurrente'
             };
 
-            // 3. Create Bookings
+            // 2. Create Bookings
             const result = await createRecurringBookings(
                 bookingTemplate,
                 startDate,
@@ -127,16 +140,29 @@ export const RecurringBookingModal: React.FC<RecurringBookingModalProps> = ({
                         </div>
                     )}
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Email del Jugador</label>
-                        <input
-                            type="email"
-                            required
-                            value={playerEmail}
-                            onChange={(e) => setPlayerEmail(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-                            placeholder="ejemplo@email.com"
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del Jugador</label>
+                            <input
+                                type="text"
+                                required
+                                value={playerName}
+                                onChange={(e) => setPlayerName(e.target.value)}
+                                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+                                placeholder="Nombre Completo"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                            <input
+                                type="tel"
+                                required
+                                value={playerPhone}
+                                onChange={(e) => setPlayerPhone(e.target.value)}
+                                className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+                                placeholder="09XX XXX XXX"
+                            />
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
