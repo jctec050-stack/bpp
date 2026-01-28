@@ -7,16 +7,18 @@ import { Venue, Booking, DisabledSlot } from '@/types';
 import { toggleSlotAvailability } from '@/services/dataService';
 import { useOwnerVenues, useOwnerBookings, useDisabledSlots } from '@/hooks/useData';
 import { ScheduleManager } from '@/components/ScheduleManager';
+import { RecurringBookingModal } from '@/components/RecurringBookingModal';
 import { Toast } from '@/components/Toast';
 
 export default function SchedulePage() {
     const { user, isLoading } = useAuth();
     const router = useRouter();
     const { venues, isLoading: venuesLoading } = useOwnerVenues(user?.id);
-    const { bookings, isLoading: bookingsLoading } = useOwnerBookings(user?.id);
+    const { bookings, isLoading: bookingsLoading, mutate: mutateBookings } = useOwnerBookings(user?.id);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const { disabledSlots, isLoading: slotsLoading, mutate: mutateSlots } = useDisabledSlots(venues[0]?.id || null, selectedDate);
     const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' } | null>(null);
+    const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
 
     useEffect(() => {
         if (!isLoading && !user) {
@@ -39,6 +41,11 @@ export default function SchedulePage() {
         } else {
             setToast({ message: "Error al actualizar el horario.", type: 'error' });
         }
+    };
+
+    const handleRecurringSuccess = async (message: string) => {
+        await mutateBookings();
+        setToast({ message, type: 'success' });
     };
 
     if (isLoading || venuesLoading || bookingsLoading || (venues.length > 0 && slotsLoading)) {
@@ -69,7 +76,17 @@ export default function SchedulePage() {
 
     return (
         <main className="max-w-7xl mx-auto px-4 py-8">
-            <h1 className="text-3xl font-extrabold text-gray-900 mb-8">Gestión de Horarios</h1>
+            <div className="flex justify-between items-center mb-8">
+                <h1 className="text-3xl font-extrabold text-gray-900">Gestión de Horarios</h1>
+                <button
+                    onClick={() => setIsRecurringModalOpen(true)}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition text-sm"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    Reserva Mensual/Fija
+                </button>
+            </div>
+
             <ScheduleManager
                 venue={venues[0]}
                 bookings={bookings}
@@ -78,6 +95,15 @@ export default function SchedulePage() {
                 selectedDate={selectedDate}
                 onDateChange={setSelectedDate}
             />
+
+            <RecurringBookingModal
+                isOpen={isRecurringModalOpen}
+                onClose={() => setIsRecurringModalOpen(false)}
+                venueId={venues[0].id}
+                courts={venues[0].courts}
+                onSuccess={handleRecurringSuccess}
+            />
+
              {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         </main>
     );

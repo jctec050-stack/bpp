@@ -391,6 +391,56 @@ export const deleteBooking = async (id: string): Promise<boolean> => {
     }
 };
 
+export const createRecurringBookings = async (
+    bookingTemplate: Omit<Booking, 'id' | 'created_at' | 'updated_at' | 'date'>,
+    startDate: string,
+    endDate: string,
+    dayOfWeek: number // 0-6 (Sun-Sat)
+): Promise<{ success: number; failures: number }> => {
+    let success = 0;
+    let failures = 0;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Iterate through dates
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        if (d.getDay() === dayOfWeek) {
+            const dateStr = d.toISOString().split('T')[0];
+            
+            // Check if slot is free (simple check, backend RLS/constraints might also catch this)
+            // But for bulk, we try to insert.
+            const booking = {
+                ...bookingTemplate,
+                date: dateStr
+            };
+            
+            const result = await createBooking(booking);
+            if (result) {
+                success++;
+            } else {
+                failures++;
+            }
+        }
+    }
+    return { success, failures };
+};
+
+export const getProfileByEmail = async (email: string): Promise<Profile | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        if (error) throw error;
+        return data as Profile;
+    } catch (error) {
+        console.error('❌ Error fetching profile by email:', error);
+        return null;
+    }
+};
+
 // ============================================
 // DISABLED SLOTS
 // ============================================
