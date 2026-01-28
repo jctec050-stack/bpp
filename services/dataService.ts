@@ -276,7 +276,7 @@ export const getBookings = async (ownerId?: string): Promise<Booking[]> => {
                 .select(`
                     *,
                     profiles:player_id (full_name, email, phone),
-                    venues:venue_id (name, address, latitude, longitude),
+                    venues:venue_id (name, address, contact_info, latitude, longitude),
                     courts:court_id (name, type)
                 `)
                 .order('date', { ascending: false });
@@ -297,6 +297,7 @@ export const getBookings = async (ownerId?: string): Promise<Booking[]> => {
             player_name: (b.profiles as any)?.full_name,
             venue_name: (b.venues as any)?.name,
             venue_address: (b.venues as any)?.address,
+            venue_contact_info: (b.venues as any)?.contact_info,
             venue_latitude: (b.venues as any)?.latitude,
             venue_longitude: (b.venues as any)?.longitude,
             court_name: (b.courts as any)?.name,

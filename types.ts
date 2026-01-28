@@ -104,6 +104,7 @@ export interface Booking {
   // Populated fields (from joins)
   venue_name?: string;
   venue_address?: string;
+  venue_contact_info?: string;
   venue_latitude?: number;
   venue_longitude?: number;
   court_name?: string;
